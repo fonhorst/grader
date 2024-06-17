@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "geowsm"
+name = "grader"
 version = "0.1.2"
 description = ""
 authors = ["fonhorst <fonhorst@alipoov.nb@gmail.com>"]
