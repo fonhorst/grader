@@ -104,7 +104,7 @@ def test_execute_interactive_task(app_context):
         workers.append(worker)
 
     # ensure that all workers are running
-    wait_for_workers(app_context, uids=[w.uuid for w in workers], desired_statuses=[WorkerStatus.running])
+    wait_for_workers(app_context, uids=[w.uid for w in workers], desired_statuses=[WorkerStatus.running])
 
     # check that listing is working
     payload = {
@@ -268,14 +268,14 @@ def test_execute_interactive_task(app_context):
     assert len(unique_hostnames_for_session_tasks) == 1
 
     # # Perform downscaling
-    active_w_id = workers[-1].uuid
+    active_w_id = workers[-1].uid
     for w in workers[:-1]:
         payload = {
             "jsonrpc": "2.0",
             "id": 0,
             "method": "IWorkers.delete",
             "params": {
-                "uid": w.uuid
+                "uid": w.uid
             },
         }
 
@@ -296,7 +296,7 @@ def test_execute_interactive_task(app_context):
     worker = IWorkerInfo.parse_obj(response)
 
     assert worker.status == WorkerStatus.running
-    assert worker.uuid == active_w_id
+    assert worker.uid == active_w_id
 
     # Checking a task can successfuly finish after the downscaling
     payload = {
@@ -810,7 +810,7 @@ def test_batch_and_interactive_run_method(app_context):
     assert worker.status in [WorkerStatus.created, WorkerStatus.running]
 
     # ensure that all workers are running
-    wait_for_workers(app_context, uids=[worker.uuid], desired_statuses=[WorkerStatus.running])
+    wait_for_workers(app_context, uids=[worker.uid], desired_statuses=[WorkerStatus.running])
 
     # run task
     payload = {
@@ -1046,7 +1046,7 @@ def test_interactive_task_no_workers(app_context, auth_token_2):
 
     workers.append(worker)
 
-    wait_for_workers(app_context, uids=[w.uuid for w in workers], desired_statuses=[WorkerStatus.running])
+    wait_for_workers(app_context, uids=[w.uid for w in workers], desired_statuses=[WorkerStatus.running])
 
     payload = {
         "jsonrpc": "2.0",

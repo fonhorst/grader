@@ -296,7 +296,7 @@ def wait_for_entities(ctx: AppContext,
             entity = entity_clazz.parse_obj(response)
 
             if entity.status in desired_statuses:
-                entities_with_desired_status[entity.uuid] = entity
+                entities_with_desired_status[entity.uid] = entity
             elif entity.status.is_terminal():
                 raise ValueError(f"Found entity in terminal undesired state ({entity.status}). No point to continue. "
                                  f"Reason: {entity.reason if hasattr(entity, 'reason') else None}")

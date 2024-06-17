@@ -223,7 +223,7 @@ def get_multiple_project_infos(project_uuids: List[str]) -> List[ProjectInfo]:
         body = make_request(project_and_users_api_url, payload)
 
     pinfos = (ProjectInfo.parse_obj(elt) for elt in body)
-    pinfos = {pinfo.uuid: pinfo for pinfo in pinfos}
+    pinfos = {pinfo.uid: pinfo for pinfo in pinfos}
 
     presult = []
     for uid in project_uuids:
@@ -287,7 +287,7 @@ def get_multiple_user_infos(user_uuids: List[str]) -> List[UserInfo]:
         body = make_request(project_and_users_api_url, payload)
 
     pinfos = (UserInfo.parse_obj(elt) for elt in body)
-    pinfos = {pinfo.uuid: pinfo for pinfo in pinfos}
+    pinfos = {pinfo.uid: pinfo for pinfo in pinfos}
 
     presult = []
     for uid in user_uuids:
