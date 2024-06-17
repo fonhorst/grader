@@ -1,23 +1,19 @@
 import datetime
 import logging
 import time
-import uuid
 from typing import cast, Optional, List, Dict, Any
 
-import filelock
 from kubernetes import client, config
-from kubernetes.client import V1NodeList, V1Node, V1PersistentVolume, V1PersistentVolumeClaim, ApiException, V1Pod, \
+from kubernetes.client import ApiException, V1Pod, \
     V1PodStatus, V1ContainerStateTerminated
 from kubernetes.utils import parse_quantity
 
-from grader.env import DEFAULT_WORKER_CONFIG_PATH
-
 from grader.db.tasks import TaskStatus
-from grader.tasks.base import LABEL_RN_PROJECT_ID, LABEL_RN_STORAGE_ID, LABEL_RN_ID, LABEL_RN_TASK_ID, \
-    TaskContainerFailed, TaskContainerExecutionTimeout, NodeType
-from grader.tasks.nodes import Node, Volume, NetworkStorage, \
-    NetworkStorageVolume, VolumeSizeException, UnknownNetworkStorageException, NodeManagementException, \
-    KubernetesException, NoSuchVolumeException, VolumeAlreadyExistsException
+from grader.env import DEFAULT_WORKER_CONFIG_PATH
+from grader.tasks.base import LABEL_RN_TASK_ID, \
+    TaskContainerFailed, TaskContainerExecutionTimeout
+from grader.tasks.nodes import NetworkStorage, \
+    KubernetesException
 
 WORKER_CONFIG_CONFIG_MAP_KEY = 'worker_config.yaml'
 GRADER = 'rnseism'
@@ -94,17 +90,6 @@ class KubernetesManager:
         key, value = K8S_BASE_LABEL.split('=')
         return {key: value}
 
-    def validate_volumes_sizes(self):
-        volumes = self.list_storage_volumes()
-        storage_uids = {volume.storage_uid for volume in volumes}
-        for storage_uid in storage_uids:
-            allocated_space_size = self._calculate_allocated_space_size(storage_uid)
-            storage = self._network_storages[storage_uid]
-            if allocated_space_size > storage.size_bytes:
-                raise VolumeSizeException(f"Overall allocated space size ({allocated_space_size}) "
-                                          f"is greater than maximum size ({storage.size_bytes}) "
-                                          f"of storage {storage_uid}")
-
     def check_if_config_map_exists(self, config_map_name: str) -> bool:
         try:
             config_map = self.client.read_namespaced_config_map(name=config_map_name, namespace=self.namespace)
@@ -116,7 +101,6 @@ class KubernetesManager:
         return True
 
     def launch_configured_pod(self, *,
-                              project_id: str,
                               pod_name: str,
                               image: str,
                               hostname: Optional[str] = None,
@@ -183,8 +167,6 @@ class KubernetesManager:
             config_map_name = worker_config_configmap
         else:
             config_map_name = self._k8s_default_config_map
-
-        storage_volumes = self.list_storage_volumes(project_uid=project_id)
 
         if service_ports:
             svc_name = f'{pod_name}-svc'
@@ -266,13 +248,6 @@ class KubernetesManager:
                                 'readOnly': True
                             },
                             *(
-                                {
-                                    'name': volume.uid,
-                                    'mountPath': f"/mnt/net_storage_{volume.storage_uid}",
-                                }
-                                for volume in storage_volumes
-                            ),
-                            *(
                                 [
                                     volume['volumeMount']
                                     for volume in volumes
@@ -297,15 +272,6 @@ class KubernetesManager:
                             'items': [{'key': WORKER_CONFIG_CONFIG_MAP_KEY, 'path': WORKER_CONFIG_CONFIG_MAP_KEY}]
                         }
                     },
-                    *(
-                        {
-                            'name': volume.uid,
-                            'persistentVolumeClaim': {
-                                'claimName': volume.uid
-                            }
-                        }
-                        for volume in storage_volumes
-                    ),
                     *(
                         [
                             volume['volume']
@@ -356,7 +322,6 @@ class KubernetesManager:
         begin = datetime.datetime.now()
         is_running = False
 
-        # TODO: can be replaced with Watch. Consider it later.
         while True:
             try:
                 pod = cast(
@@ -372,9 +337,6 @@ class KubernetesManager:
                 = pod.metadata.labels[LABEL_RN_TASK_ID] if LABEL_RN_TASK_ID in pod.metadata.labels else 'UNKNOWN'
 
             logger.debug("Current status of pod %s for task %s is %s" % (pod_name, curr_task_id, status.phase))
-
-            # TODO: process 'Evicted' state
-            # TODO: process external pod deletion
 
             if status.phase == 'Running':
                 is_running = True
@@ -395,7 +357,6 @@ class KubernetesManager:
                 return exit_code
 
             elapsed_time = (datetime.datetime.now() - begin).total_seconds()
-            # TODO: handle container creating
             if not is_running and elapsed_time > timeout_to_get_running:
                 raise TaskContainerFailed(f"Container {pod_name} of task {curr_task_id} "
                                           f"has not transfered to 'Running' status "
@@ -408,48 +369,3 @@ class KubernetesManager:
                                                     f"Elapsed seconds: {elapsed_time}.")
 
             time.sleep(status_check_time_interval)
-
-    def list_storage_volumes(self, project_uid: Optional[str] = None) -> List[Volume]:
-        if project_uid:
-            label_selector = [K8S_BASE_LABEL, f'{LABEL_RN_PROJECT_ID}={project_uid}']
-        else:
-            label_selector = [K8S_BASE_LABEL]
-
-        label_selector = ','.join(label_selector)
-
-        try:
-            volume_claims = self._client.list_namespaced_persistent_volume_claim(
-                namespace=self._namespace,
-                label_selector=label_selector
-            ).items
-        except ApiException as ex:
-            raise KubernetesException() from ex
-
-        return [self._from_k8s_volume_claim(v) for v in volume_claims]
-
-    def _calculate_allocated_space_size(self, storage_uid: str) -> int:
-        label_selector = ','.join([f'{LABEL_RN_STORAGE_ID}={storage_uid}'])
-        try:
-            claims= self._client.list_namespaced_persistent_volume_claim(
-                namespace=self._namespace,
-                label_selector=label_selector
-            ).items
-        except ApiException as ex:
-            raise KubernetesException() from ex
-
-        allocated_size = sum(size2bytes(claim.spec.resources.requests['storage']) for claim in claims)
-        return allocated_size
-
-    @staticmethod
-    def _from_k8s_volume_claim(volume_claim: V1PersistentVolumeClaim) -> Volume:
-        name = volume_claim.metadata.name
-        labels: Dict[str, str] = volume_claim.metadata.labels
-        storage_uid = labels[LABEL_RN_STORAGE_ID]
-        project_uid = labels[LABEL_RN_PROJECT_ID]
-        size_bytes = size2bytes(volume_claim.spec.resources.requests['storage'])
-        return Volume(
-            uid=name,
-            storage_uid=storage_uid,
-            project_uid=project_uid,
-            size_bytes=size_bytes
-        )
