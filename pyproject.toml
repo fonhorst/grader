@@ -7,8 +7,6 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.12"
-rnseism = { git = "https://readtoken:T_DgWiqKf_UtbLjb4E4q@gitlab.actcognitive.org/seism/backend/rnseism.git", rev="e45a1f6a43677bb5c21b66be386002cb28623998" }
-rnseism_sdk = { git = "https://readtoken:48DnVhq4oQ1T4u5Tcze7@gitlab.actcognitive.org/seism/backend/rnseism-sdk.git", rev = "94d3725ad8ea8d6e50d97c0cbf7d9573f37789cf" }
 uvicorn = "^0.21.1"
 fastapi = "^0.100.0"
 pydantic = "^1.10.7"
