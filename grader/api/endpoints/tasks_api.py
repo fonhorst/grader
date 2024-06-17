@@ -27,6 +27,8 @@ from geowsm.api.schemas.tasks import TaskListFilter, TaskTunings, TaskInfoRespon
     SyncCapableTasks, TaskStatus, TaskEvent, NodeInfo
 from geowsm.app import TASKS_MANAGEMENT_SECTION, jsonrpc_api_v1, app
 
+from grader.api.schemas.tasks import AvailableTaskTypes
+
 METHOD_PREFIX = "Task"
 
 
@@ -157,11 +159,7 @@ async def _validate_prepare_args_for_task(codegen_service, task, token):
 
 
 @app.get("/tasks")
-def list_(
-    filter: TaskListFilter = Body(..., description="filter"),
-    tunings: TaskTunings = Body(..., description="tunings"),
-    navigation: Navigation = Body(..., description="navigation")
-) -> List[tasks.TaskInfoResponse]:
+def list_(filter: TaskListFilter = Body(..., description="filter")) -> List[tasks.TaskInfoResponse]:
     filter_kwargs = handle_filter(filter)
     logger.debug("Filtering tasks with filter kwargs %s" % filter_kwargs)
     tasks = tasks_manager().list(**filter_kwargs, navigation=navigation,
@@ -177,8 +175,7 @@ def get(
     uid: str = Path(
         description="Unique identifier of task to get info about",
         example="b6da673d-116f-4177-8cc6-34e101cb0b17"
-    ),
-    tunings: Optional[TaskTunings] = Body(None, description="tunings")
+    )
 ) -> TaskInfoResponse:
     task = tasks_manager().get(uid, include_reason=(tunings and tunings.include_reason))
     kwargs = handle_tunings(task, tunings)
@@ -215,11 +212,10 @@ def get_log(
 
 @app.get("/task/start")
 async def start(
-    task: AsyncCapableTasks = Body(
+    task: AvailableTaskTypes = Body(
         ...,
         discriminator='task_type',
-        description="Task object containing info about what and how to run",
-        example="TBD"
+        description="Task object containing info about what and how to run"
     )
 ) -> TaskInfoResponse:
     logger.info("Got task %s" % task)
@@ -242,11 +238,8 @@ def cancel(
     ),
     wait: Optional[float] = Query(
         None,
-        description="If set, forces this method to wait until the task is changes its status "
-                    "to one of terminal statuses (finished, failed or cancelled). "
-                    "If set to 0 or -1, the method will wait until the status changes to a terminal status. "
-                    "If set to a positive value, the method will wait until either the status changes "
-                    "to a terminal status or the timeout is exceeded.",
+        description="If set, forces this method to wait until the task changes its status "
+                    "to one of terminal statuses (finished, failed or cancelled). ",
         example="TBD"
     )
 ) -> TaskInfoResponse:

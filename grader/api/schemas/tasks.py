@@ -315,7 +315,7 @@ class TaskLogResponse(BaseModel):
     )
 
 
-DiffrenetTasks = Union[
+AvailableTaskTypes = Union[
      TaskRequest,
      BatchTaskRequest,
      SparkTaskRequest
