@@ -16,7 +16,7 @@ from geowsm.api.endpoints import (
     codegen_api
 )
 
-from geowsm.api.endpoints.base_api import base_router
+from grader.api.endpoints.base_api import base_router
 
 app.include_router(base_router)
 

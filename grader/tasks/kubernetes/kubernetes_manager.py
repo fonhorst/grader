@@ -12,8 +12,6 @@ from grader.db.tasks import TaskStatus
 from grader.env import DEFAULT_WORKER_CONFIG_PATH
 from grader.tasks.base import LABEL_TASK_ID, \
     TaskContainerFailed, TaskContainerExecutionTimeout
-from grader.tasks.nodes import NetworkStorage, \
-    KubernetesException
 
 WORKER_CONFIG_CONFIG_MAP_KEY = 'worker_config.yaml'
 GRADER = 'rnseism'
@@ -94,7 +92,7 @@ class KubernetesManager:
         except ApiException as ex:
             if ex.status == 404:
                 return False
-            raise KubernetesException() from ex
+            raise ex
 
         return True
 
@@ -303,7 +301,7 @@ class KubernetesManager:
                 self.client.create_namespaced_service(namespace=self.namespace, body=svc_body)
         except ApiException as ex:
             logger.error("Kubernetes ApiException error", exc_info=True)
-            raise KubernetesException() from ex
+            raise ex
 
         logger.info("Pod %s has been successfully launched" % pod_name)
 
@@ -321,13 +319,10 @@ class KubernetesManager:
         is_running = False
 
         while True:
-            try:
-                pod = cast(
-                    V1Pod,
-                    self.client.read_namespaced_pod(name=pod_name, namespace=self.namespace)
-                )
-            except ApiException as ex:
-                raise KubernetesException() from ex
+            pod = cast(
+                V1Pod,
+                self.client.read_namespaced_pod(name=pod_name, namespace=self.namespace)
+            )
 
             status = cast(V1PodStatus, pod.status)
 

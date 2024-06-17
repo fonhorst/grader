@@ -10,6 +10,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship, joinedload
 
+from grader.env import ENV_VAR_RUNNER_DB_CONN, ENV_VAR_ECHO_DB_QUERY
+
 logger = logging.getLogger(__name__)
 
 DateTimeType = Optional[Union[str, float, datetime.datetime]]

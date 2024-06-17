@@ -13,7 +13,7 @@ from kubernetes import client, config
 from rnseism_sdk.db.tasks import create_task, update_task_status, TaskStatus, TaskType
 from rnseism_sdk.sdk.base import DataStorage
 from grader.tasks.app import BATCH_TASKS_QUEUE, make_app, KUBERNETES_BATCH_TASKS_QUEUE
-from grader.tasks.base import TasksManager, TaskAndResult, TaskInfo, LABEL_ENTITY_TYPE, \
+from grader.tasks.base import TasksManager, TaskAndResult, TaskInfo, \
     GRADER_BATCH_TASK, LABEL_TASK_ID, LABEL_TASK_TYPE
 from grader.tasks.batch_tasks_args import BatchTaskRunArgs
 from grader.tasks.tasks import run_docker_batch_task, run_kubernetes_batch_task
@@ -63,7 +63,7 @@ class BatchTasksManager(TasksManager):
         ctask = qs.run_func
         ctask.bind(app)
         awaitable_result: AsyncResult = ctask.apply_async(
-            args=[token, str(task_id), run_call],
+            args=[str(task_id), run_call],
             task_id=str(task_id),
             queue=qs.queue,
             routing_key=qs.routing_key
