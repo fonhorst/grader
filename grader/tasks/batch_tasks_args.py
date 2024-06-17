@@ -1,12 +1,11 @@
 from typing import Optional, Dict, List, Any
 
-from rnseism_sdk.db.tasks import TaskType
-
+from grader.db.tasks import TaskType
 from grader.tasks.base import TaskRunArgs
 
 
-class BatchTaskRunArgs(TaskRunArgs):
-    task_type: str = TaskType.batch.value
+class ContainerTaskRunArgs(TaskRunArgs):
+    task_type: str = TaskType.container.value
     image: str
     environment: Optional[Dict[str, str]] = None
     command: Optional[List[str]] = None
@@ -16,7 +15,7 @@ class BatchTaskRunArgs(TaskRunArgs):
     volumes: Optional[Dict[str, Any]] = None
 
 
-class SparkOnK8sBatchTaskRunArgs(BatchTaskRunArgs):
+class SparkTaskRunArgs(ContainerTaskRunArgs):
     task_type: str = TaskType.spark.value
     k8s_spark_config_map_name: str = "spark-conf"
     service_type: str = 'ClusterIP'

@@ -10,12 +10,11 @@ import docker
 from celery.result import AsyncResult
 from kubernetes import client, config
 
-from rnseism_sdk.db.tasks import create_task, update_task_status, TaskStatus, TaskType
-from rnseism_sdk.sdk.base import DataStorage
+from grader.db.tasks import create_task, TaskType, update_task_status, TaskStatus
 from grader.tasks.app import BATCH_TASKS_QUEUE, make_app, KUBERNETES_BATCH_TASKS_QUEUE
 from grader.tasks.base import TasksManager, TaskAndResult, TaskInfo, \
-    GRADER_BATCH_TASK, LABEL_TASK_ID, LABEL_TASK_TYPE
-from grader.tasks.batch_tasks_args import BatchTaskRunArgs
+    GRADER_BATCH_TASK, LABEL_TASK_ID, LABEL_TASK_TYPE, DataStorage
+from grader.tasks.batch_tasks_args import ContainerTaskRunArgs
 from grader.tasks.tasks import run_docker_batch_task, run_kubernetes_batch_task
 from grader.tasks.utils import get_docker_container_logs, get_kubernetes_container_logs
 
@@ -41,7 +40,7 @@ class BatchTasksManager(TasksManager):
         super().__init__()
         self.result_storage = result_storage
 
-    def start(self, args: BatchTaskRunArgs) -> TaskAndResult:
+    def start(self, args: ContainerTaskRunArgs) -> TaskAndResult:
         run_call = args.dict()
 
         task_id = uuid.uuid4()
@@ -49,9 +48,11 @@ class BatchTasksManager(TasksManager):
         task = create_task(
             uid=task_id,
             name=args.name,
+            requester=args.requester,
+            student=args.student,
+            project=args.project,
+            tag=args.tag,
             task_type=TaskType(args.task_type),
-            user_id=args.user_id,
-            project_id=args.project_id,
             job_id=args.job_id,
             priority=args.priority,
             parameters=args.parameters,
@@ -95,8 +96,7 @@ class DockerBatchTasksManager(BatchTasksManager):
     def get_log(self, uid: str, tail: Optional[int] = None) -> Optional[str]:
         # _, task_uid = split_complex_uid(uid)
         labels = [
-            f'{LABEL_TASK_ID}={uid}',
-            f'{LABEL_ENTITY_TYPE}={GRADER_BATCH_TASK}'
+            f'{LABEL_TASK_ID}={uid}'
         ]
         return get_docker_container_logs(self._client, labels, tail)
 

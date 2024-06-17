@@ -13,7 +13,7 @@ from grader.api.schemas.tasks import TaskListFilter, TaskInfoResponse, TaskResul
 from grader.app import app
 from grader.db.tasks import TaskType
 from grader.tasks.base import TaskInfo, TaskRunArgs
-from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
+from grader.tasks.batch_tasks_args import ContainerTaskRunArgs, SparkTaskRunArgs
 
 METHOD_PREFIX = "Task"
 
@@ -110,9 +110,9 @@ def _validate_prepare_args_for_task(task):
     targs = task.dict()
 
     if task_type == TaskType.container:
-        task_args = BatchTaskRunArgs(**targs)
+        task_args = ContainerTaskRunArgs(**targs)
     elif task_type == TaskType.spark:
-        task_args = SparkOnK8sBatchTaskRunArgs(**targs)
+        task_args = SparkTaskRunArgs(**targs)
     else:
         task_args = TaskRunArgs(**targs)
 

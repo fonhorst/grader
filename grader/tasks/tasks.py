@@ -10,21 +10,18 @@ from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from docker.models.containers import Container
 from kubernetes.client import V1Pod, V1ContainerStateTerminated, ApiException
-from rnseism_sdk.db.tasks import update_task_status, TaskStatus, TaskType
-from rnseism_sdk.envs import (
-    ENV_VAR_RUNNER_DB_CONN, DEFAULT_WORKER_CONFIG_PATH, ENV_VAR_RUNNER_DB_CONN_EXTERNAL,
-)
-from rnseism_sdk.runner.base import Runner
-from rnseism_sdk.worker.base import ParametersManager
+
+from grader.db.tasks import TaskStatus, update_task_status, TaskType
 
 from grader.env import ENV_VAR_BATCH_WORKER_REMOVE_CONTAINER_POLICY, \
     ENV_VAR_BATCH_WORKER_CONFIG_VOLUME, \
     ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, ENV_VAR_TASK_ID, ENV_VAR_JOB_ID, \
-    ENV_VAR_WORKER_NETWORK, ENV_VAR_BATCH_WORKER_TYPE
+    ENV_VAR_WORKER_NETWORK, ENV_VAR_BATCH_WORKER_TYPE, ENV_VAR_RUNNER_DB_CONN, DEFAULT_WORKER_CONFIG_PATH, \
+    ENV_VAR_RUNNER_DB_CONN_EXTERNAL
 from grader.tasks.base import TaskResult, GRADER_BATCH_TASK, \
     LABEL_TASK_ID, LABEL_TASK_TYPE, LABEL_ID, \
-    TaskContainerFailed
-from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
+    TaskContainerFailed, ParametersManager
+from grader.tasks.batch_tasks_args import ContainerTaskRunArgs, SparkTaskRunArgs
 from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager, LABEL_K8S_OWNER, GRADER
 from grader.tasks.utils import try_pull_image
 
@@ -38,7 +35,6 @@ class BatchWorkerType(enum.Enum):
     kubernetes = 'kubernetes'
 
 
-_current_runner: Optional[Runner] = None
 _current_parameters_manager: Optional[ParametersManager] = None
 _current_kubernetes_manager: Optional[KubernetesManager] = None
 
@@ -46,15 +42,6 @@ _current_kubernetes_manager: Optional[KubernetesManager] = None
 def get_batch_worker_type() -> Optional[BatchWorkerType]:
     type = os.environ.get(ENV_VAR_BATCH_WORKER_TYPE, None)
     return BatchWorkerType(type) if type else None
-
-
-def set_current_runner(runner: Runner):
-    global _current_runner
-    _current_runner = runner
-
-
-def current_runner() -> Optional[Runner]:
-    return _current_runner
 
 
 def set_current_parameters_manager(storage: ParametersManager):
@@ -105,12 +92,12 @@ class ContainerRemovePolicy(enum.Enum):
 
 class BatchTaskExecutor(ABC):
     @classmethod
-    def parse_args(cls, args: Dict[str, Any]) -> BatchTaskRunArgs:
-        return BatchTaskRunArgs.parse_obj(args)
+    def parse_args(cls, args: Dict[str, Any]) -> ContainerTaskRunArgs:
+        return ContainerTaskRunArgs.parse_obj(args)
 
     def __init__(self, curr_task_id: str, args: Dict[str, Any]):
         self._curr_task_id = curr_task_id
-        self.run_args: BatchTaskRunArgs = self.parse_args(args)
+        self.run_args: ContainerTaskRunArgs = self.parse_args(args)
 
     def run(self) -> Dict[str, Any]:
         logger.info(f"Received task with args: {self.run_args.dict()}")
@@ -336,11 +323,11 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
 
 class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
     @classmethod
-    def parse_args(cls, args: Dict[str, Any]) -> SparkOnK8sBatchTaskRunArgs:
-        return SparkOnK8sBatchTaskRunArgs.parse_obj(args)
+    def parse_args(cls, args: Dict[str, Any]) -> SparkTaskRunArgs:
+        return SparkTaskRunArgs.parse_obj(args)
 
     def launch_container(self) -> int:
-        run_args = cast(SparkOnK8sBatchTaskRunArgs, self.run_args)
+        run_args = cast(SparkTaskRunArgs, self.run_args)
 
         if not self._manager.check_if_config_map_exists(run_args.k8s_spark_config_map_name):
             # todo custom exception

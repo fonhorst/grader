@@ -14,7 +14,7 @@ from grader.tasks.base import LABEL_TASK_ID, \
     TaskContainerFailed, TaskContainerExecutionTimeout
 
 WORKER_CONFIG_CONFIG_MAP_KEY = 'worker_config.yaml'
-GRADER = 'rnseism'
+GRADER = 'grader'
 K8S_ACCESS_FILE_LOCK = "k8s_access_file_lock.txt.lock"
 LABEL_K8S_OWNER= 'owner'
 K8S_BASE_LABEL = f'{LABEL_K8S_OWNER}={GRADER}'
@@ -52,7 +52,7 @@ def k8s_status_to_task_status(status: str) -> TaskStatus:
 
 class KubernetesManager:
     def __init__(self,
-                 namespace: str = "rnseism",
+                 namespace: str = "grader",
                  scratch_size_bytes: int = _TEN_GYGABYTES,
                  k8s_filelock_timeout: int = 5,
                  k8s_operation_timeout: int = 5,

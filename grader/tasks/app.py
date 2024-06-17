@@ -12,7 +12,7 @@ KUBERNETES_BATCH_TASKS_QUEUE = "kubernetes_batch_tasks"
 
 def make_app():
     app = Celery(
-        'rnseism',
+        'grader',
         broker=os.environ.get("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672"),
         backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
     )
