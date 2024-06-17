@@ -41,7 +41,7 @@ class BatchTasksManager(TasksManager):
         super().__init__()
         self.result_storage = result_storage
 
-    def start(self, token: str, args: BatchTaskRunArgs) -> TaskAndResult:
+    def start(self, args: BatchTaskRunArgs) -> TaskAndResult:
         run_call = args.dict()
 
         task_id = uuid.uuid4()

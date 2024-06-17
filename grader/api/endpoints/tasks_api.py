@@ -4,22 +4,16 @@ import pprint
 from typing import Optional, List, Dict, Any, Union
 
 from fastapi import Body, Path, Query
-from grader.api.base import tasks_manager
-from grader.api.endpoints.utils import check_project_exists, check_user_exists, handle_tunings, \
-    batch_handle_tunings
-from grader.api.endpoints.utils import handle_source
-from grader.api.exceptions.common import JsonrpcError, NO_IWORKERS
-from grader.api.schemas import tasks
-from grader.api.schemas.tasks import TaskListFilter, TaskInfoResponse, TaskResultResponse, TaskLogResponse, \
-    TaskStatus, TaskEvent, NodeInfo
-from grader.app import app
-from grader.tasks.base import TaskInfo, split_complex_uid
-from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
-from grader.tasks.exceptions import NoInteractiveWorkersError
-from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
-from rnseism_sdk.db.tasks import TaskType
 
+from grader.api.base import tasks_manager
+from grader.api.schemas import tasks
 from grader.api.schemas.tasks import AvailableTaskTypes
+from grader.api.schemas.tasks import TaskListFilter, TaskInfoResponse, TaskResultResponse, TaskLogResponse, \
+    TaskStatus
+from grader.app import app
+from grader.db.tasks import TaskType
+from grader.tasks.base import TaskInfo, TaskRunArgs
+from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
 
 METHOD_PREFIX = "Task"
 
@@ -37,13 +31,7 @@ def format_datetime(dt: Optional[Union[float, datetime.datetime]]) -> Optional[s
     return dt.isoformat()
 
 
-def convert_task_info_to_response(
-        task: TaskInfo,
-        author_name: Optional[str] = None,
-        project_name: Optional[str] = None,
-        project_info: Optional[str] = None,
-        nodes: Optional[List[NodeInfo]] = None,
-        events: Optional[List[TaskEvent]] = None) -> TaskInfoResponse:
+def convert_task_info_to_response(task: TaskInfo) -> TaskInfoResponse:
     task_response = TaskInfoResponse(
         **task.dict(exclude={'uid', 'task_type', 'status', 'status_updated_at', 'submit_time', 'end_time'}),
         uuid=task.uid,
@@ -51,11 +39,6 @@ def convert_task_info_to_response(
         end_time=format_datetime(task.end_time),
         task_type=task.task_type.value,
         status=TaskStatus(task.status.value),
-        author_name=author_name,
-        project_name=project_name,
-        project_info=project_info,
-        nodes=nodes,
-        events=events
     )
     return task_response
 
@@ -74,10 +57,13 @@ def handle_filter(filter: TaskListFilter) -> Dict[str, Any]:
                                  filter.submit_time.lt or filter.submit_time.lte)
 
     ffields =[
-        ('uuid', 'uuids', filter.uuid),
+        ('uid', 'uids', filter.uid),
         ('name', 'name', filter.name),
-        ('project_id', 'project_ids', filter.project_uid),
-        ('user_uid', 'author_ids', filter.user_uid),
+        ('requester', 'requester', filter.requester),
+        ('student', 'student', filter.student),
+        ('project', 'project', filter.project),
+        ('tag', 'tag', filter.tag),
+        ('job_id', 'job_ids', filter.job_id),
         ('status', 'statusess', filter.status),
         ('task_type', 'task_types', filter.task_type)
     ]
@@ -112,54 +98,44 @@ def handle_filter(filter: TaskListFilter) -> Dict[str, Any]:
 
         kwargs[arg_name] = values
 
-    if 'uuids' in kwargs:
-        kwargs['uuids'] = [split_complex_uid(uid)[1] for uid in kwargs['uuids']]
-
     if 'name' in kwargs and len(kwargs['name']) == 1 and '%' in kwargs['name'][0]:
         kwargs['name'] = kwargs['name'][0]
 
     return kwargs
 
 
-async def _validate_prepare_args_for_task(codegen_service, task, token):
-    supported_task_types = [TaskType.batch, TaskType.interactive, TaskType.spark]
-
+def _validate_prepare_args_for_task(task):
     task_type = TaskType(task.task_type)
-    if task_type not in supported_task_types:
-        raise ValueError(f'Unsupported task type "{task.task_type}". '
-                         f'Only the following types are supported: {supported_task_types}')
 
-    check_project_exists(token.project_id)
-    check_user_exists(token.user_id)
+    targs = task.dict()
 
-    await handle_source(codegen_service, task, task_type, token)
-
-    targs = {
-        'user_id': token.user_id,
-        'project_id': token.project_id,
-        **task.dict(exclude={'task_type', 'job_source'})
-    }
-
-    if task_type == TaskType.batch:
+    if task_type == TaskType.container:
         task_args = BatchTaskRunArgs(**targs)
     elif task_type == TaskType.spark:
         task_args = SparkOnK8sBatchTaskRunArgs(**targs)
     else:
-        task_args = InteractiveTaskRunArgs(**targs, session_id=task.session_uid)
+        task_args = TaskRunArgs(**targs)
 
     return task_args
 
 
 @app.get("/tasks")
-def list_(filter: TaskListFilter = Body(..., description="filter")) -> List[tasks.TaskInfoResponse]:
+def list_(
+        filter: TaskListFilter = Body(
+            ...,
+            description="filter"
+        ),
+        include_reason = Query(
+            False,
+            description="Whatever to include detailed reason or not"
+        )
+) -> List[tasks.TaskInfoResponse]:
     filter_kwargs = handle_filter(filter)
     logger.debug("Filtering tasks with filter kwargs %s" % filter_kwargs)
-    tasks = tasks_manager().list(**filter_kwargs, navigation=navigation,
-                                 include_reason=(tunings and tunings.include_reason))
+    tasks = tasks_manager().list(**filter_kwargs, include_reason=include_reason)
     logger.debug("Obtained all tasks for %s" % filter_kwargs)
-    uuid2kwargs = batch_handle_tunings(tasks, tunings)
     logger.debug("Handled tunings for %s" % filter_kwargs)
-    return [convert_task_info_to_response(task, **uuid2kwargs[task.uid]) for task in tasks]
+    return [convert_task_info_to_response(task) for task in tasks]
 
 
 @app.get("/task/{uid}")
@@ -167,11 +143,14 @@ def get(
     uid: str = Path(
         description="Unique identifier of task to get info about",
         example="b6da673d-116f-4177-8cc6-34e101cb0b17"
+    ),
+    include_reason = Query(
+        False,
+        description="Whatever to include detailed reason or not"
     )
 ) -> TaskInfoResponse:
-    task = tasks_manager().get(uid, include_reason=(tunings and tunings.include_reason))
-    kwargs = handle_tunings(task, tunings)
-    return convert_task_info_to_response(task, **kwargs)
+    task = tasks_manager().get(uid, include_reason=include_reason)
+    return convert_task_info_to_response(task)
 
 
 @app.get("/task/{uid}/result")
@@ -182,8 +161,7 @@ def get_result(
     )
 ) -> TaskResultResponse:
     results = tasks_manager().get_result(uid)
-    # TODO: set correct level here
-    logger.warning("Results:\n %s" % pprint.pformat(results))
+    logger.debug("Results:\n %s" % pprint.pformat(results))
     return TaskResultResponse(uid=uid, results=results)
 
 
@@ -211,14 +189,8 @@ async def start(
     )
 ) -> TaskInfoResponse:
     logger.info("Got task %s" % task)
-
-    task_args = await _validate_prepare_args_for_task(codegen_service, task, token)
-
-    try:
-        atask = tasks_manager().start(token.token, task_args)
-    except NoInteractiveWorkersError as e:
-        raise JsonrpcError(code=NO_IWORKERS, message=str(e))
-
+    task_args = _validate_prepare_args_for_task(task)
+    atask = tasks_manager().start(task_args)
     return convert_task_info_to_response(atask.task)
 
 
@@ -235,7 +207,6 @@ def cancel(
         example="TBD"
     )
 ) -> TaskInfoResponse:
-    # TODO: Need to add sync version of the method
     tasks_manager().stop(uid)
     task = tasks_manager().get(uid)
     return convert_task_info_to_response(task)

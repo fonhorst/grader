@@ -183,7 +183,7 @@ class TasksManager(ABC):
         return None
 
     @abstractmethod
-    def start(self, token: str, args: TaskRunArgs) -> TaskAndResult:
+    def start(self, args: TaskRunArgs) -> TaskAndResult:
         ...
 
     @abstractmethod
