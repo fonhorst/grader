@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "grader"
+version = "0.1.2"
+description = ""
+authors = ["fonhorst <fonhorst@alipoov.nb@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10, <3.12"
+uvicorn = "^0.21.1"
+fastapi = "^0.100.0"
+pydantic = "^1.10.7"
+fastapi-pagination = "^0.11.4"
+sqlalchemy = "^2.0.7"
+asyncpg = "^0.27.0"
+docker = "^6.0.1"
+redis = "^4.5.3"
+celery = "^5.2.7"
+python-redis-cache = "^1.2.0"
+python-jose = "^3.3.0"
+aiocache = "^0.12.1"
+aiohttp = "*"
+psycopg2-binary = "^2.9.6"
+uvloop = "^0.17.0"
+pyyaml = "^6.0.1"
+httpx = "^0.25.0"
+requests = "<2.32.0"
+requests-toolbelt = "^1.0.0"
+kubernetes = "^28.1.0"
+filelock = "^3.13.0"
+dill = "*"
+psutil = "^5.9.8"
+
+[tool.poetry.scripts]
+grader = "grader.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
