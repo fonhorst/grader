@@ -24,22 +24,16 @@ def _load_config() -> Dict[str, Any]:
 
 
 def _create_tasks_manager() -> TasksManager:
-    for env_var in [ENV_VAR_EXECUTION_BACKEND, ENV_VAR_RESULT_STORAGE_URL,
-                    ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND]:
-        if env_var not in os.environ:
-            raise ValueError(f"{env_var} env var should be set")
-
-    execution_backend = os.environ[ENV_VAR_EXECUTION_BACKEND]
-    result_storage_url = os.environ[ENV_VAR_RESULT_STORAGE_URL]
-
-    config_path = DEFAULT_WORKER_CONFIG_PATH
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    execution_backend = os.environ.get(ENV_VAR_EXECUTION_BACKEND, "docker")
+    result_storage_url = os.environ.get(ENV_VAR_RESULT_STORAGE_URL, "redis://localhost:6379")
 
     result_storage = RedisDataStorage(prefix="", redis_client=redis.from_url(result_storage_url))
     if execution_backend == 'docker':
         manager = DockerBatchTasksManager(result_storage=result_storage)
     elif execution_backend == 'kubernetes':
+        config_path = DEFAULT_WORKER_CONFIG_PATH
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
         if 'kubernetes_manager' not in config:
             raise ValueError(f"No configuration for 'kubernetes_manager' in {config_path}")
 

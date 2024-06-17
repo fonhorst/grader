@@ -8,13 +8,7 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)8s] %(
 
 # pylint: disable=unused-import
 # noinspection PyUnresolvedReferences
-from geowsm.api.endpoints import (
-    iworkers_api,
-    network_storage_api,
-    node_api,
-    tasks_api,
-    codegen_api
-)
+from grader.api.endpoints import base_api, tasks_api
 
 from grader.api.endpoints.base_api import base_router
 
