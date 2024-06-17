@@ -12,12 +12,12 @@ from kubernetes import client, config
 
 from rnseism_sdk.db.tasks import create_task, update_task_status, TaskStatus, TaskType
 from rnseism_sdk.sdk.base import DataStorage
-from geowsm.tasks.app import BATCH_TASKS_QUEUE, make_app, KUBERNETES_BATCH_TASKS_QUEUE
-from geowsm.tasks.base import TasksManager, TaskAndResult, TaskInfo, LABEL_RN_ENTITY_TYPE, \
+from grader.tasks.app import BATCH_TASKS_QUEUE, make_app, KUBERNETES_BATCH_TASKS_QUEUE
+from grader.tasks.base import TasksManager, TaskAndResult, TaskInfo, LABEL_RN_ENTITY_TYPE, \
     RNSEISM_BATCH_TASK, LABEL_RN_TASK_ID, LABEL_RN_TASK_TYPE
-from geowsm.tasks.batch_tasks_args import BatchTaskRunArgs
-from geowsm.tasks.tasks import run_docker_batch_task, run_kubernetes_batch_task
-from geowsm.tasks.utils import get_docker_container_logs, get_kubernetes_container_logs
+from grader.tasks.batch_tasks_args import BatchTaskRunArgs
+from grader.tasks.tasks import run_docker_batch_task, run_kubernetes_batch_task
+from grader.tasks.utils import get_docker_container_logs, get_kubernetes_container_logs
 
 logger = logging.getLogger()
 

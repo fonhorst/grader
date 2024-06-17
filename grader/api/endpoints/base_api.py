@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from geowsm.settings import settings
+from grader.settings import settings
 
 base_router = APIRouter()
 

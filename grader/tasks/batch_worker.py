@@ -6,9 +6,9 @@ import redis
 import yaml
 from celery.signals import worker_init
 
-from geowsm.tasks.app import make_app
+from grader.tasks.app import make_app
 from rnseism_sdk.worker.base import ParametersManager
-from geowsm.tasks.kubernetes.kubernetes_manager import KubernetesManager
+from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager
 from .nodes import NetworkStorage
 from .tasks import run_docker_batch_task, run_kubernetes_batch_task, set_current_parameters_manager, \
     get_batch_worker_type, set_current_kubernetes_manager, BatchWorkerType

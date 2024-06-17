@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from geowsm.env import PG_URL
+from grader.env import PG_URL
 
 engine = create_async_engine(PG_URL)
 Base = declarative_base()

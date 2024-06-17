@@ -20,20 +20,20 @@ from rnseism_sdk.envs import (
     # ENV_VAR_HDFS_NN_HTTP_URI, ENV_VAR_HDFS_DATANODE_HOSTNAME
 )
 
-from geowsm.env import ENV_VAR_BATCH_WORKER_REMOVE_CONTAINER_POLICY, \
+from grader.env import ENV_VAR_BATCH_WORKER_REMOVE_CONTAINER_POLICY, \
     ENV_VAR_BATCH_WORKER_CONFIG_VOLUME, \
     ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, ENV_VAR_TASK_ID, ENV_VAR_JOB_ID, \
     ENV_VAR_WORKER_NETWORK, ENV_VAR_BATCH_WORKER_TYPE
 from rnseism_sdk.runner.base import RunnerException, Runner
-from geowsm.tasks.base import TaskResult, LABEL_RN_ENTITY_TYPE, RNSEISM_BATCH_TASK, \
+from grader.tasks.base import TaskResult, LABEL_RN_ENTITY_TYPE, RNSEISM_BATCH_TASK, \
     LABEL_RN_TASK_ID, LABEL_RN_JOB_ID, LABEL_RN_PROJECT_ID, LABEL_RN_USER_ID, LABEL_RN_TASK_TYPE, LABEL_RN_ID, \
     TaskContainerFailed, NodeType
 from rnseism_sdk.worker.base import ParametersManager
-from geowsm.tasks.interactive_tasks import InteractiveTaskRunArgs
-from geowsm.tasks.kubernetes.kubernetes_manager import KubernetesManager, \
+from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
+from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager, \
     LABEL_K8S_RN_OWNER, RNSEISM, LABEL_K8S_RN_NODE_TYPE_LABEL_KEY
-from geowsm.tasks.utils import try_pull_image
-from geowsm.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
+from grader.tasks.utils import try_pull_image
+from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
 
 logger = logging.getLogger(__name__)
 

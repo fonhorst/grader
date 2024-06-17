@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Extra
 
-from geowsm.tasks.base import NodeType
+from grader.tasks.base import NodeType
 
 
 class Node(BaseModel):

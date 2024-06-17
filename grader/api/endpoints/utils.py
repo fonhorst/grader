@@ -19,15 +19,15 @@ from requests.adapters import HTTPAdapter
 from rnseism.jwt import JWT
 from rnseism.jwt.exceptions import JsonrpcError
 
-from geowsm.db.codegen_introspection import CodegenIntrospection
-from geowsm.api.services.codegen_introspect_service import CodegenIntrospectionService
-from geowsm.api.schemas.jobs import JobType
-from geowsm.tasks.base import TaskInfo
+from grader.db.codegen_introspection import CodegenIntrospection
+from grader.api.services.codegen_introspect_service import CodegenIntrospectionService
+from grader.api.schemas.jobs import JobType
+from grader.tasks.base import TaskInfo
 from urllib3 import Retry
 
-from geowsm.api.base import handle_tunings_mode, project_and_users_api_url
-from geowsm.api.schemas.tasks import TaskTunings, NodeInfo, ResourceInfo, ResourceUnitsEnum, BatchTaskRequest
-from geowsm.env import JSONRPC_API_ROOT
+from grader.api.base import handle_tunings_mode, project_and_users_api_url
+from grader.api.schemas.tasks import TaskTunings, NodeInfo, ResourceInfo, ResourceUnitsEnum, BatchTaskRequest
+from grader.env import JSONRPC_API_ROOT
 from rnseism_sdk.db.tasks import TaskType
 from rnseism_sdk.sdk.env import ENV_VAR_TOKEN
 

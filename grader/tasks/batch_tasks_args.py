@@ -2,7 +2,7 @@ from typing import Optional, Dict, List, Any
 
 from rnseism_sdk.db.tasks import TaskType
 
-from geowsm.tasks.base import TaskRunArgs
+from grader.tasks.base import TaskRunArgs
 
 
 class BatchTaskRunArgs(TaskRunArgs):

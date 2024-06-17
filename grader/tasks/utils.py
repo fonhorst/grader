@@ -6,7 +6,7 @@ from docker import DockerClient
 from docker.models.containers import Container
 from kubernetes.client import CoreV1Api, V1Pod
 
-from geowsm.env import ENV_VAR_DOCKER_BACKEND_PULL_IMAGE_BEFORE_START
+from grader.env import ENV_VAR_DOCKER_BACKEND_PULL_IMAGE_BEFORE_START
 
 logger = logging.getLogger(__name__)
 

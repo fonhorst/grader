@@ -6,17 +6,17 @@ import redis
 import yaml
 from rnseism_sdk.envs import DEFAULT_WORKER_CONFIG_PATH
 
-from geowsm.env import ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, \
+from grader.env import ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, \
     ENV_VAR_BATCH_WORKER_CONFIG_VOLUME
 from rnseism_sdk.sdk.data_storage import RedisDataStorage
 from rnseism_sdk.session import RedisBasedSessionStatusStorage
 
-from geowsm.tasks.batch_tasks import DockerBatchTasksManager, KubernetesBatchTasksManager
-from geowsm.tasks.docker_based_interactive_tasks import DockerBasedInteractiveTasksManager, \
+from grader.tasks.batch_tasks import DockerBatchTasksManager, KubernetesBatchTasksManager
+from grader.tasks.docker_based_interactive_tasks import DockerBasedInteractiveTasksManager, \
     KubernetesBasedInteractiveTasksManager
-from geowsm.tasks.kubernetes.kubernetes_manager import KubernetesManager
-from geowsm.tasks.manager import CompositeTasksManager
-from geowsm.tasks.nodes import NetworkStorage
+from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager
+from grader.tasks.manager import CompositeTasksManager
+from grader.tasks.nodes import NetworkStorage
 
 from geowsm.env import ENV_WMS_CONFIG, ENV_WMS_SESSION_STATUS_STORAGE_URL, ENV_WMS_RESULT_STORAGE_URL, \
     ENV_WMS_TUNINGS_PROJECTS_AND_USES_API_URL, ENV_WMS_HANDLE_TUNINGS_MODE, ENV_WMS_EXECUTION_BACKEND, CM_NAME, \

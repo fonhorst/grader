@@ -2,30 +2,22 @@ import datetime
 import logging
 import pprint
 from typing import Optional, List, Dict, Any, Union
-from urllib.parse import urlparse, ParseResult
 
-from fastapi import Depends, Body, Path, Query
-from rnseism.models.base import Navigation
-
-from geowsm.api.endpoints.utils import handle_source
-from geowsm.api.services.codegen_introspect_service import CodegenIntrospectionService
+from fastapi import Body, Path, Query
+from grader.api.base import tasks_manager
+from grader.api.endpoints.utils import check_project_exists, check_user_exists, handle_tunings, \
+    batch_handle_tunings
+from grader.api.endpoints.utils import handle_source
+from grader.api.exceptions.common import JsonrpcError, NO_IWORKERS
+from grader.api.schemas import tasks
+from grader.api.schemas.tasks import TaskListFilter, TaskInfoResponse, TaskResultResponse, TaskLogResponse, \
+    TaskStatus, TaskEvent, NodeInfo
+from grader.app import app
+from grader.tasks.base import TaskInfo, split_complex_uid
+from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
+from grader.tasks.exceptions import NoInteractiveWorkersError
+from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
 from rnseism_sdk.db.tasks import TaskType
-
-from geowsm.api.exceptions.common import JsonrpcError, NO_IWORKERS
-from geowsm.tasks.exceptions import NoInteractiveWorkersError
-from geowsm.tasks.base import TaskInfo, split_complex_uid
-from geowsm.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
-from geowsm.tasks.interactive_tasks import InteractiveTaskRunArgs
-
-from geowsm.api.base import tasks_manager
-from geowsm.api.endpoints.utils import TokenInfo, get_token, check_project_exists, check_user_exists, handle_tunings, \
-    batch_handle_tunings, parse_job_id
-from geowsm.api.schemas import tasks
-from geowsm.api.schemas.tasks import TaskListFilter, TaskTunings, TaskInfoResponse, TaskResultResponse, TaskLogResponse, \
-    ComputableFunction, \
-    AsyncCapableTasks, \
-    SyncCapableTasks, TaskStatus, TaskEvent, NodeInfo
-from geowsm.app import TASKS_MANAGEMENT_SECTION, jsonrpc_api_v1, app
 
 from grader.api.schemas.tasks import AvailableTaskTypes
 
