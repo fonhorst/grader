@@ -7,31 +7,17 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.10, <3.12"
-#horizon_picker = { file = "interpretation_wheels/horizon_picker-2.0.8+host-py3-none-manylinux_2_28_x86_64.whl" }
-#seismo_attributes = { file = "interpretation_wheels/seismo_attributes-0.0.6+host-cp38-none-manylinux_2_28_x86_64.whl" }
-#unison = { git = "https://mytoken:X6_K1hx94svqLgkpswvv@gitlab.actcognitive.org/seism/backend/unison-utils.git", rev = "6b8fe8b68f60128f157b59c73d37de55e5a419dc" }
 rnseism = { git = "https://readtoken:T_DgWiqKf_UtbLjb4E4q@gitlab.actcognitive.org/seism/backend/rnseism.git", rev="e45a1f6a43677bb5c21b66be386002cb28623998" }
 rnseism_sdk = { git = "https://readtoken:48DnVhq4oQ1T4u5Tcze7@gitlab.actcognitive.org/seism/backend/rnseism-sdk.git", rev = "94d3725ad8ea8d6e50d97c0cbf7d9573f37789cf" }
 uvicorn = "^0.21.1"
-fastapi-jsonrpc = "2.7.2"
-# version 0.99 is broken
 fastapi = "^0.100.0"
 pydantic = "^1.10.7"
 fastapi-pagination = "^0.11.4"
 sqlalchemy = "^2.0.7"
 asyncpg = "^0.27.0"
 docker = "^6.0.1"
-clickhouse-driver = {extras = ["numpy"], version = "^0.2.5"}
-pillow = "^10.0.0"
-pyimage = "^0.1.1"
-opencv-python = "^4.7.0.72"
-numba = "^0.56.4"
 redis = "^4.5.3"
 celery = "^5.2.7"
-cpufeature = "^0.2.1"
-numpy = "1.23.5"
-typeguard = "^3.0.2"
-clickhouse-pool = "^0.5.3"
 python-redis-cache = "^1.2.0"
 python-jose = "^3.3.0"
 aiocache = "^0.12.1"
@@ -47,26 +33,8 @@ filelock = "^3.13.0"
 dill = "*"
 psutil = "^5.9.8"
 
-[tool.poetry.group.tests]
-optional = true
-
-[tool.poetry.group.tests.dependencies]
-pytest = "^7.2.2"
-pytest-docker = "^2.0.1"
-
-[tool.poetry.dev-dependencies]
-black = "*"
-pytest = "^7.2.2"
-pytest-docker = "^2.0.1"
-
-[tool.pytest.ini_options]
-log_cli = true
-log_cli_level = "INFO"
-log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
-log_cli_date_format = "%Y-%m-%d %H:%M:%S"
-
 [tool.poetry.scripts]
-geowsm = "geowsm.main:main"
+grader = "grader.main:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
