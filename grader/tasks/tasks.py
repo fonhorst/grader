@@ -296,17 +296,13 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
     def launch_container(self) -> int:
         # TODO: workflow_config is not correct
         self._manager.launch_configured_pod(
-            project_id=self.run_args.project_id,
             pod_name=self._pod_name,
             image=self.run_args.image,
             labels={
                 **self._manager.base_labels(),
                 LABEL_ID: self._curr_task_id,
                 LABEL_TASK_ID: self._curr_task_id,
-                LABEL_TASK_TYPE: GRADER_BATCH_TASK,
-                LABEL_PROJECT_ID: self.run_args.project_id,
-                LABEL_JOB_ID: self.run_args.job_id,
-                LABEL_USER_ID: self.run_args.user_id
+                LABEL_TASK_TYPE: GRADER_BATCH_TASK
             },
             node_selector={
                 LABEL_K8S_OWNER: GRADER,
@@ -400,17 +396,13 @@ class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
             raise ValueError(f"Spark config map with name {run_args.k8s_spark_config_map_name} doesn't exist")
 
         self._manager.launch_configured_pod(
-            project_id=run_args.project_id,
             pod_name=self._pod_name,
             image=run_args.image,
             labels={
                 **self._manager.base_labels(),
                 LABEL_ID: self._curr_task_id,
                 LABEL_TASK_ID: self._curr_task_id,
-                LABEL_TASK_TYPE: GRADER_BATCH_TASK,
-                LABEL_PROJECT_ID: run_args.project_id,
-                LABEL_JOB_ID: run_args.job_id,
-                LABEL_USER_ID: run_args.user_id
+                LABEL_TASK_TYPE: GRADER_BATCH_TASK
             },
             node_selector={
                 LABEL_K8S_OWNER: GRADER,

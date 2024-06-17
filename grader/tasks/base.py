@@ -5,26 +5,14 @@ from typing import Dict, Any, List, Optional, Union, Tuple
 
 from celery.result import AsyncResult
 from pydantic import BaseModel
-from rnseism.models.base import Navigation
 
-from grader.db.tasks import Task, TaskStatus, TaskType, list_tasks, get_task
-
-# from rnseism_sdk.db.tasks import Task, list_tasks, get_task, TaskStatus, TaskType, DateTimeType
-# from rnseism_sdk.sdk.base import DataStorage
+from grader.db.tasks import Task, TaskStatus, TaskType, list_tasks, get_task, DateTimeType
 
 GRADER_BATCH_WORKER = 'batch-worker'
 GRADER_BATCH_TASK = 'batch-task'
-
-
 LABEL_ID = 'grader_id'
-LABEL_ENTITY_TYPE = 'grader_entity_type'
-LABEL_ENTITY_NAME = 'grader_entity_name'
 LABEL_TASK_ID = 'grader_task_id'
 LABEL_TASK_TYPE = 'grader_task_type'
-LABEL_PROJECT_ID = 'grader_project_id'
-LABEL_STORAGE_ID = 'grader_storage_id'
-LABEL_JOB_ID = 'grader_job_id'
-LABEL_USER_ID = 'grader_user_id'
 
 
 class TaskInfo(BaseModel):
@@ -95,30 +83,56 @@ class TaskRunArgs(BaseModel):
     parameters: Dict[str, Any]
 
 
+class DataStorage(ABC):
+    @abstractmethod
+    def put(self, result_id: str, value):
+        ...
+
+    @abstractmethod
+    def get(self, result_id: str, default: Optional[Any] = None) -> Any:
+        ...
+
+    @abstractmethod
+    def exists(self, result_id: str) -> bool:
+        ...
+
+    @abstractmethod
+    def remove(self, result_id: str):
+        ...
+
+    @abstractmethod
+    def list(self, prefix: str) -> Dict[str, Any]:
+        ...
+
+
 class TasksManager(ABC):
     task_types: List[str]
     result_storage: DataStorage
 
     def list(self,
              uuids: Optional[List[str]] = None,
-             project_ids: Optional[List[str]] = None,
-             author_ids: Optional[List[str]] = None,
-             statusess: Optional[List[str]] = None,
+             requester: Optional[Union[str, List[str]]] = None,
+             student: Optional[Union[str, List[str]]] = None,
+             project: Optional[Union[str, List[str]]] = None,
+             tag: Optional[Union[str, List[str]]] = None,
              task_types: Optional[List[str]] = None,
+             job_ids: Optional[List[str]] = None,
+             statusess: Optional[List[str]] = None,
              submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None,
              name: Optional[Union[str, List[str]]] = None,
-             navigation: Optional[Navigation] = None,
              include_reason: bool = False) -> List[TaskInfo]:
         return [
             TaskInfo.from_task(task) for task in list_tasks(
-                uuids=uuids,
+                uids=uuids,
+                name=name,
+                requester=requester,
+                student=student,
+                project=project,
+                tag=tag,
                 task_types=task_types or self.task_types,
-                project_ids=project_ids,
-                author_ids=author_ids,
+                job_ids=job_ids,
                 statusess=statusess,
                 submit_time=submit_time,
-                name=name,
-                navigation=navigation,
                 include_reason=include_reason
             )
         ]
