@@ -1,7 +1,6 @@
 import enum
 import logging
 import os
-import traceback
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from typing import Dict, Any, Optional, List, cast
@@ -11,29 +10,23 @@ from billiard.exceptions import SoftTimeLimitExceeded
 from celery import shared_task
 from docker.models.containers import Container
 from kubernetes.client import V1Pod, V1ContainerStateTerminated, ApiException
-
-from rnseism_sdk.db.tasks import update_task_status, TaskStatus, report_task_fail_reason, TaskType
-# TODO: uncomment env imports when new rnseism_sdk referenced`
+from rnseism_sdk.db.tasks import update_task_status, TaskStatus, TaskType
 from rnseism_sdk.envs import (
-    ENV_VAR_RUNNER_DB_CONN, DEFAULT_WORKER_CONFIG_PATH, ENV_VAR_TOKEN, ENV_VAR_RUNNER_DB_CONN_EXTERNAL,
-    ENV_VAR_LOGGING_LEVEL, # ENV_VAR_HDFS_CLUSTER_NAME, ENV_VAR_HDFS_NAMENODE_HEAPSIZE, ENV_VAR_HDFS_NN_RPC_URI,
-    # ENV_VAR_HDFS_NN_HTTP_URI, ENV_VAR_HDFS_DATANODE_HOSTNAME
+    ENV_VAR_RUNNER_DB_CONN, DEFAULT_WORKER_CONFIG_PATH, ENV_VAR_RUNNER_DB_CONN_EXTERNAL,
 )
+from rnseism_sdk.runner.base import Runner
+from rnseism_sdk.worker.base import ParametersManager
 
 from grader.env import ENV_VAR_BATCH_WORKER_REMOVE_CONTAINER_POLICY, \
     ENV_VAR_BATCH_WORKER_CONFIG_VOLUME, \
     ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, ENV_VAR_TASK_ID, ENV_VAR_JOB_ID, \
     ENV_VAR_WORKER_NETWORK, ENV_VAR_BATCH_WORKER_TYPE
-from rnseism_sdk.runner.base import RunnerException, Runner
-from grader.tasks.base import TaskResult, LABEL_ENTITY_TYPE, GRADER_BATCH_TASK, \
-    LABEL_TASK_ID, LABEL_JOB_ID, LABEL_PROJECT_ID, LABEL_USER_ID, LABEL_TASK_TYPE, LABEL_ID, \
-    TaskContainerFailed, NodeType
-from rnseism_sdk.worker.base import ParametersManager
-from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
-from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager, \
-    LABEL_K8S_OWNER, GRADER, LABEL_K8S_RN_NODE_TYPE_LABEL_KEY
-from grader.tasks.utils import try_pull_image
+from grader.tasks.base import TaskResult, GRADER_BATCH_TASK, \
+    LABEL_TASK_ID, LABEL_TASK_TYPE, LABEL_ID, \
+    TaskContainerFailed
 from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
+from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager, LABEL_K8S_OWNER, GRADER
+from grader.tasks.utils import try_pull_image
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +46,7 @@ _current_kubernetes_manager: Optional[KubernetesManager] = None
 def get_batch_worker_type() -> Optional[BatchWorkerType]:
     type = os.environ.get(ENV_VAR_BATCH_WORKER_TYPE, None)
     return BatchWorkerType(type) if type else None
+
 
 def set_current_runner(runner: Runner):
     global _current_runner
@@ -114,8 +108,7 @@ class BatchTaskExecutor(ABC):
     def parse_args(cls, args: Dict[str, Any]) -> BatchTaskRunArgs:
         return BatchTaskRunArgs.parse_obj(args)
 
-    def __init__(self, token: str, curr_task_id: str, args: Dict[str, Any]):
-        self.token = token
+    def __init__(self, curr_task_id: str, args: Dict[str, Any]):
         self._curr_task_id = curr_task_id
         self.run_args: BatchTaskRunArgs = self.parse_args(args)
 
@@ -161,7 +154,7 @@ class BatchTaskExecutor(ABC):
 
     @abstractmethod
     def launch_container(self) -> int:
-       ...
+        ...
 
     @abstractmethod
     def clean_on_exit(self, failed: bool):
@@ -169,8 +162,8 @@ class BatchTaskExecutor(ABC):
 
 
 class DockerBatchTaskExecutor(BatchTaskExecutor):
-    def __init__(self, token: str,  curr_task_id: str, args: Dict[str, Any]):
-        super().__init__(token, curr_task_id, args)
+    def __init__(self, curr_task_id: str, args: Dict[str, Any]):
+        super().__init__(curr_task_id, args)
         self._container = None
         self._client = docker.from_env()
 
@@ -180,7 +173,6 @@ class DockerBatchTaskExecutor(BatchTaskExecutor):
                            "Currently we don't support cpu limits for docker based executor. "
                            "Ignoring it." % self._curr_task_id)
 
-        # TODO: fix this expression
         volumes = [f"{os.environ[ENV_VAR_BATCH_WORKER_CONFIG_VOLUME]}:{DEFAULT_WORKER_CONFIG_PATH}"] \
             if ENV_VAR_BATCH_WORKER_CONFIG_VOLUME in os.environ else None
 
@@ -191,35 +183,13 @@ class DockerBatchTaskExecutor(BatchTaskExecutor):
         self._container = self._client.containers.run(
             detach=True,
             labels={
-                LABEL_ENTITY_TYPE: GRADER_BATCH_TASK,
                 LABEL_TASK_ID: self._curr_task_id,
-                LABEL_JOB_ID: self.run_args.job_id,
-                LABEL_PROJECT_ID: self.run_args.project_id,
-                LABEL_USER_ID: self.run_args.user_id
             },
             environment={
                 **(self.run_args.environment or dict()),
-                ENV_VAR_TOKEN: self.token,
                 ENV_VAR_TASK_ID: self._curr_task_id,
                 ENV_VAR_JOB_ID: self.run_args.job_id,
-                ENV_VAR_RUNNER_DB_CONN: os.environ[ENV_VAR_RUNNER_DB_CONN],
-                # ENV_VAR_CELERY_BROKER_URL: os.environ[ENV_VAR_CELERY_BROKER_URL],
-                # ENV_VAR_CELERY_RESULT_BACKEND: os.environ[ENV_VAR_CELERY_RESULT_BACKEND]
-
-                # HDFS credentials
-                # TODO: uncomment imports and reference env var name variables from rnseism_sdk
-                "WMS_HDFS_CLUSTER_NAME": os.getenv("WMS_HDFS_CLUSTER_NAME"),
-                "WMS_HDFS_NAMENODE_HEAPSIZE": os.getenv("WMS_HDFS_NAMENODE_HEAPSIZE"),
-                "WMS_HDFS_NN_RPC_URI": os.getenv("WMS_HDFS_NN_RPC_URI"),
-                "WMS_HDFS_NN_HTTP_URI": os.getenv("WMS_HDFS_NN_HTTP_URI"),
-                "WMS_HDFS_DATANODE_HOSTNAME": os.getenv("WMS_HDFS_DATANODE_HOSTNAME"),
-
-                # SeismReader service URIs
-                "SEISMREADER_COORDINATOR_HOST_PORT": os.getenv("SEISMREADER_COORDINATOR_HOST_PORT"),
-                "SEISMREADER_RABBITMQ_HOST": os.getenv("SEISMREADER_RABBITMQ_HOST"),
-                "SEISMREADER_RABBITMQ_PORT": os.getenv("SEISMREADER_RABBITMQ_PORT"),
-                "SEISMREADER_WORKER_IDS": os.getenv("SEISMREADER_WORKER_IDS"),
-                "SEISMREADER_WORKER_ADDRESSES": os.getenv("SEISMREADER_WORKER_ADDRESSES"),
+                ENV_VAR_RUNNER_DB_CONN: os.environ[ENV_VAR_RUNNER_DB_CONN]
             },
             volumes=volumes,
             network=os.environ.get(ENV_VAR_WORKER_NETWORK, None),
@@ -280,13 +250,12 @@ class DockerBatchTaskExecutor(BatchTaskExecutor):
 
 class KubernetesBatchTasksExecutor(BatchTaskExecutor):
     def __init__(self,
-                 token: str,
                  curr_task_id: str,
                  args: Dict[str, Any],
                  status_check_time_interval: float = 1,
                  timeout_to_get_running: float = 5,
                  termination_graceful_timeout: int = 5):
-        super().__init__(token, curr_task_id, args)
+        super().__init__(curr_task_id, args)
         self._manager = current_kubernetes_manager()
         self._status_check_time_interval = status_check_time_interval
         self._timeout_to_get_running = timeout_to_get_running
@@ -294,7 +263,6 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
         self._termination_graceful_timeout = termination_graceful_timeout
 
     def launch_container(self) -> int:
-        # TODO: workflow_config is not correct
         self._manager.launch_configured_pod(
             pod_name=self._pod_name,
             image=self.run_args.image,
@@ -305,33 +273,16 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
                 LABEL_TASK_TYPE: GRADER_BATCH_TASK
             },
             node_selector={
-                LABEL_K8S_OWNER: GRADER,
-                LABEL_K8S_RN_NODE_TYPE_LABEL_KEY: NodeType.compute.value
+                LABEL_K8S_OWNER: GRADER
             },
             command=self.run_args.entrypoint,
             args=self.run_args.command,
             env={
                 **(self.run_args.environment or dict()),
-                ENV_VAR_TOKEN: self.token,
                 ENV_VAR_TASK_ID: self._curr_task_id,
                 ENV_VAR_JOB_ID: self.run_args.job_id,
-                # incorrect setting for this setup
-                ENV_VAR_RUNNER_DB_CONN: os.environ.get(ENV_VAR_RUNNER_DB_CONN_EXTERNAL, os.environ[ENV_VAR_RUNNER_DB_CONN]),
-
-                # HDFS credentials
-                # TODO: uncomment imports and reference env var name variables from rnseism_sdk
-                "WMS_HDFS_CLUSTER_NAME": os.getenv("WMS_HDFS_CLUSTER_NAME"),
-                "WMS_HDFS_NAMENODE_HEAPSIZE": os.getenv("WMS_HDFS_NAMENODE_HEAPSIZE"),
-                "WMS_HDFS_NN_RPC_URI": os.getenv("WMS_HDFS_NN_RPC_URI"),
-                "WMS_HDFS_NN_HTTP_URI": os.getenv("WMS_HDFS_NN_HTTP_URI"),
-                "WMS_HDFS_DATANODE_HOSTNAME": os.getenv("WMS_HDFS_DATANODE_HOSTNAME"),
-
-                # SeismReader service URIs
-                "SEISMREADER_COORDINATOR_HOST_PORT": os.getenv("SEISMREADER_COORDINATOR_HOST_PORT"),
-                "SEISMREADER_RABBITMQ_HOST": os.getenv("SEISMREADER_RABBITMQ_HOST"),
-                "SEISMREADER_RABBITMQ_PORT": os.getenv("SEISMREADER_RABBITMQ_PORT"),
-                "SEISMREADER_WORKER_IDS": os.getenv("SEISMREADER_WORKER_IDS"),
-                "SEISMREADER_WORKER_ADDRESSES": os.getenv("SEISMREADER_WORKER_ADDRESSES"),
+                ENV_VAR_RUNNER_DB_CONN:
+                    os.environ.get(ENV_VAR_RUNNER_DB_CONN_EXTERNAL, os.environ[ENV_VAR_RUNNER_DB_CONN]),
             },
             cpu=self.run_args.cpu,
             memory=self.run_args.memory,
@@ -405,39 +356,21 @@ class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
                 LABEL_TASK_TYPE: GRADER_BATCH_TASK
             },
             node_selector={
-                LABEL_K8S_OWNER: GRADER,
-                LABEL_K8S_RN_NODE_TYPE_LABEL_KEY: NodeType.compute.value
+                LABEL_K8S_OWNER: GRADER
             },
             command=self.run_args.entrypoint,
             args=self.run_args.command,
             env={
                 **(self.run_args.environment or dict()),
-                ENV_VAR_TOKEN: self.token,
                 ENV_VAR_TASK_ID: self._curr_task_id,
                 ENV_VAR_JOB_ID: self.run_args.job_id,
-                ENV_VAR_RUNNER_DB_CONN: os.environ.get(ENV_VAR_RUNNER_DB_CONN_EXTERNAL, os.environ[ENV_VAR_RUNNER_DB_CONN]),
-                "RNSEISM_SPARK_CLUSTER": "yes",
-                "RNSEISM_SPARK_CONF_SPARK_KUBERNETES_DRIVER_POD_NAME": f"{self._pod_name}",
-                "RNSEISM_SPARK_CONF_SPARK_KUBERNETES_DRIVER_MASTER": f"{self._pod_name}",
-                "RNSEISM_SPARK_CONF_SPARK_DRIVER_HOST": f"{self._pod_name}",
-                "RNSEISM_SPARK_CONF_SPARK_DRIVER_PORT": "39951",
-                # may be in settings set by user
-                # ENV_VAR_LOGGING_LEVEL
-                # "RNSEISM_CODEGEN_STEP_IMPORTER_PATH": "['file:///usr/local/lib/python3.10/site-packages/rnseism_sdk/spark/custom/custom_processors.py']"
-
-                # HDFS credentials
-                # TODO: uncomment imports and reference env var name variables from rnseism_sdk
-                "WMS_HDFS_CLUSTER_NAME": os.getenv("WMS_HDFS_CLUSTER_NAME"),
-                "WMS_HDFS_NAMENODE_HEAPSIZE": os.getenv("WMS_HDFS_NAMENODE_HEAPSIZE"),
-                "WMS_HDFS_NN_RPC_URI": os.getenv("WMS_HDFS_NN_RPC_URI"),
-                "WMS_HDFS_NN_HTTP_URI": os.getenv("WMS_HDFS_NN_HTTP_URI"),
-                "WMS_HDFS_DATANODE_HOSTNAME": os.getenv("WMS_HDFS_DATANODE_HOSTNAME"),
-
-                "SEISMREADER_COORDINATOR_HOST_PORT": os.getenv("SEISMREADER_COORDINATOR_HOST_PORT"),
-                "SEISMREADER_RABBITMQ_HOST": os.getenv("SEISMREADER_RABBITMQ_HOST"),
-                "SEISMREADER_RABBITMQ_PORT": os.getenv("SEISMREADER_RABBITMQ_PORT"),
-                "SEISMREADER_WORKER_IDS": os.getenv("SEISMREADER_WORKER_IDS"),
-                "SEISMREADER_WORKER_ADDRESSES": os.getenv("SEISMREADER_WORKER_ADDRESSES"),
+                ENV_VAR_RUNNER_DB_CONN:
+                    os.environ.get(ENV_VAR_RUNNER_DB_CONN_EXTERNAL, os.environ[ENV_VAR_RUNNER_DB_CONN]),
+                "GRADER_SPARK_CLUSTER": "yes",
+                "GRADER_SPARK_CONF_SPARK_KUBERNETES_DRIVER_POD_NAME": f"{self._pod_name}",
+                "GRADER_SPARK_CONF_SPARK_KUBERNETES_DRIVER_MASTER": f"{self._pod_name}",
+                "GRADER_SPARK_CONF_SPARK_DRIVER_HOST": f"{self._pod_name}",
+                "GRADER_SPARK_CONF_SPARK_DRIVER_PORT": "39951",
             },
             cpu=self.run_args.cpu,
             memory=self.run_args.memory,
@@ -469,16 +402,16 @@ class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
 
 
 @shared_task
-def run_docker_batch_task(token: str, curr_task_uid: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    return DockerBatchTaskExecutor(token, curr_task_uid, args).run()
+def run_docker_batch_task(curr_task_uid: str, args: Dict[str, Any]) -> Dict[str, Any]:
+    return DockerBatchTaskExecutor(curr_task_uid, args).run()
 
 
 @shared_task
-def run_kubernetes_batch_task(token: str, curr_task_uid: str, args: Dict[str, Any]) -> Dict[str, Any]:
+def run_kubernetes_batch_task(curr_task_uid: str, args: Dict[str, Any]) -> Dict[str, Any]:
     if 'task_type' not in args:
         raise ValueError("Arguments doesn't contain 'task_type' field")
 
     if args['task_type'] == TaskType.spark.value:
-        return SparkOnK8sBatchTasksExecutor(token, curr_task_uid, args).run()
+        return SparkOnK8sBatchTasksExecutor(curr_task_uid, args).run()
 
-    return KubernetesBatchTasksExecutor(token, curr_task_uid, args).run()
+    return KubernetesBatchTasksExecutor(curr_task_uid, args).run()
