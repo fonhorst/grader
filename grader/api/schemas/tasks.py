@@ -53,9 +53,30 @@ class TaskTunings(BaseModel):
     )
 
 
-# Schemes representing main Task and TaskInfo objects
 class TaskRequest(BaseModel):
-    name: Optional[str] = Field(None, description="name of the task", example="interpretation-server-replica-0")
+    name: Optional[str] = Field(
+        None,
+        description="name of the task",
+        example="interpretation-server-replica-0"
+    )
+
+    requester: str = Field(
+        None,
+        description="Name or uid of the one who submitted the task",
+        example="tutor"
+    )
+
+    student: str = Field(
+        None,
+        description="Name or uid of the one the task was submitted for",
+        example="apetrov"
+    )
+
+    project: str = Field(
+        None,
+        description="Name of the project or course name the student belongs to",
+        example="bigdata"
+    )
 
     task_type: str = Field(
         ...,
@@ -71,12 +92,6 @@ class TaskRequest(BaseModel):
                     ' or "script://<image_name>" for execution of a compiled script)'
                     ', job_source field is required to work with graph or script',
         example='"geostat:cross_correlation", "graph://<image_name>", ...',
-    )
-
-    job_source: Optional[str] = Field(
-        None,
-        description='networkx yaml graph dump or compiled python script string for a custom pipeline job;'
-                    ' required if job_id starts with "graph://" or "script://"'
     )
 
     priority: Optional[float] = Field(
