@@ -121,8 +121,8 @@ class TaskStatus(enum.Enum):
 
 
 class TaskType(enum.Enum):
-    batch = "batch"
-    interactive = "interactive"
+    regular = "regular"
+    container = "container"
     # spark on k8s as a batch task
     spark = "spark"
 
