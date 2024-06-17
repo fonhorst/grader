@@ -14,7 +14,6 @@ from rnseism_sdk.db.tasks import TaskStatus
 from rnseism_sdk.envs import DEFAULT_WORKER_CONFIG_PATH
 from grader.tasks.base import LABEL_RN_PROJECT_ID, LABEL_RN_STORAGE_ID, LABEL_RN_ID, LABEL_RN_TASK_ID, \
     TaskContainerFailed, TaskContainerExecutionTimeout, NodeType
-from grader.tasks.interactive_tasks import InteractiveWorkerStatus
 from grader.tasks.nodes import Node, Volume, NetworkStorage, \
     NetworkStorageVolume, VolumeSizeException, UnknownNetworkStorageException, NodeManagementException, \
     KubernetesException, NoSuchVolumeException, VolumeAlreadyExistsException
