@@ -180,7 +180,7 @@ def get_log(
     return TaskLogResponse(uid=uid, log=tasks_manager().get_log(uid, tail))
 
 
-@app.get("/task/start")
+@app.post("/task/start")
 async def start(
     task: AvailableTaskTypes = Body(
         ...,

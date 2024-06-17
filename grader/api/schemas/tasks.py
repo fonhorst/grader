@@ -76,6 +76,7 @@ class TaskListFilter(BaseModel):
 
 
 class TaskRequest(BaseModel):
+
     name: Optional[str] = Field(
         None,
         description="name of the task",
@@ -106,11 +107,7 @@ class TaskRequest(BaseModel):
         example="fall'24"
     )
 
-    task_type: str = Field(
-        ...,
-        description="type of the task to run, affects how and where the task will be executed",
-        example="regular"
-    )
+    task_type: Literal['regular']
 
     job_id: str = Field(
         ...,
@@ -130,8 +127,8 @@ class TaskRequest(BaseModel):
     )
 
 
-class BatchTaskRequest(TaskRequest):
-    task_type: Literal['batch']
+class ContainerTaskRequest(TaskRequest):
+    task_type: Literal['container']
 
     image: str = Field(
         ...,
@@ -202,7 +199,7 @@ class BatchTaskRequest(TaskRequest):
     )
 
 
-class SparkTaskRequest(BatchTaskRequest):
+class SparkTaskRequest(ContainerTaskRequest):
     task_type: Literal['spark']
 
     k8s_spark_config_map_name: str = Field(
@@ -317,6 +314,6 @@ class TaskLogResponse(BaseModel):
 
 AvailableTaskTypes = Union[
      TaskRequest,
-     BatchTaskRequest,
+     ContainerTaskRequest,
      SparkTaskRequest
 ]
