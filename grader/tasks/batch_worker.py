@@ -7,13 +7,13 @@ import yaml
 from celery.signals import worker_init
 
 from grader.tasks.app import make_app
-from rnseism_sdk.worker.base import ParametersManager
 from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager
-from .nodes import NetworkStorage
+from .base import ParametersManager
+from .redis_data_storage import RedisDataStorage
 from .tasks import run_docker_batch_task, run_kubernetes_batch_task, set_current_parameters_manager, \
     get_batch_worker_type, set_current_kubernetes_manager, BatchWorkerType
-from rnseism_sdk.envs import DEFAULT_WORKER_CONFIG_PATH, ENV_VAR_WORKER_CONFIG_PATH
-from rnseism_sdk.sdk.data_storage import RedisDataStorage
+from ..env import ENV_VAR_WORKER_CONFIG_PATH, DEFAULT_WORKER_CONFIG_PATH
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,15 +38,14 @@ def at_start(sender, **_):
 
         client = redis.from_url(config['parameters_manager'])
         storage = RedisDataStorage(client)
-
         pstorage = ParametersManager(storage)
+
         set_current_parameters_manager(pstorage)
 
         if wtype == BatchWorkerType.kubernetes:
             cfg = copy(config['kubernetes_manager'])
-            network_storages = [NetworkStorage.parse_obj(s) for s in cfg['network_storages']]
             del cfg['network_storages']
-            k8s_manager = KubernetesManager(network_storages=network_storages, **cfg)
+            k8s_manager = KubernetesManager(**cfg)
             set_current_kubernetes_manager(k8s_manager)
 
         logger.warning("Worker is initialized")

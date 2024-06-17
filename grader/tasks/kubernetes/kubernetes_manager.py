@@ -54,7 +54,6 @@ def k8s_status_to_task_status(status: str) -> TaskStatus:
 
 class KubernetesManager:
     def __init__(self,
-                 network_storages: List[NetworkStorage],
                  namespace: str = "rnseism",
                  scratch_size_bytes: int = _TEN_GYGABYTES,
                  k8s_filelock_timeout: int = 5,
@@ -62,7 +61,6 @@ class KubernetesManager:
                  k8s_default_config_map: Optional[str] = None):
         config.load_kube_config()
         self._client = client.CoreV1Api()
-        self._network_storages: Dict[str, NetworkStorage] = {storage.uid: storage for storage in network_storages}
         self._namespace = namespace
         self._scratch_size_bytes = scratch_size_bytes
         self._k8s_filelock_timeout = k8s_filelock_timeout

@@ -1,3 +1,4 @@
+import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -103,6 +104,31 @@ class DataStorage(ABC):
     @abstractmethod
     def list(self, prefix: str) -> Dict[str, Any]:
         ...
+
+
+class ParametersManager:
+    def __init__(self, storage: DataStorage):
+        self._storage = storage
+
+    def put(self, task_uid: str, parameters: Dict[str, Any]) -> str:
+        params_key = self._key(task_uid)
+        params_value = pickle.dumps(parameters)
+        self._storage.put(params_key, params_value)
+        return params_key
+
+    def get(self, task_uid: str) -> Dict[str, Any]:
+        params_key = self._key(task_uid)
+        params_value = self._storage.get(params_key)
+        parameters = pickle.loads(params_value)
+        return parameters
+
+    def remove(self, task_uid: str):
+        params_key = self._key(task_uid)
+        self._storage.remove(params_key)
+
+    @staticmethod
+    def _key(task_uid: str) -> str:
+        return f"params-{task_uid}"
 
 
 class TasksManager(ABC):
