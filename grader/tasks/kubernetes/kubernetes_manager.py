@@ -10,7 +10,7 @@ from kubernetes.utils import parse_quantity
 
 from grader.db.tasks import TaskStatus
 from grader.env import DEFAULT_WORKER_CONFIG_PATH
-from grader.tasks.base import LABEL_RN_TASK_ID, \
+from grader.tasks.base import LABEL_TASK_ID, \
     TaskContainerFailed, TaskContainerExecutionTimeout
 from grader.tasks.nodes import NetworkStorage, \
     KubernetesException
@@ -334,7 +334,7 @@ class KubernetesManager:
             status = cast(V1PodStatus, pod.status)
 
             curr_task_id: str \
-                = pod.metadata.labels[LABEL_RN_TASK_ID] if LABEL_RN_TASK_ID in pod.metadata.labels else 'UNKNOWN'
+                = pod.metadata.labels[LABEL_TASK_ID] if LABEL_TASK_ID in pod.metadata.labels else 'UNKNOWN'
 
             logger.debug("Current status of pod %s for task %s is %s" % (pod_name, curr_task_id, status.phase))
 

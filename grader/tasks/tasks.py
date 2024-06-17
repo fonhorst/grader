@@ -25,8 +25,8 @@ from grader.env import ENV_VAR_BATCH_WORKER_REMOVE_CONTAINER_POLICY, \
     ENV_VAR_CELERY_BROKER_URL, ENV_VAR_CELERY_RESULT_BACKEND, ENV_VAR_TASK_ID, ENV_VAR_JOB_ID, \
     ENV_VAR_WORKER_NETWORK, ENV_VAR_BATCH_WORKER_TYPE
 from rnseism_sdk.runner.base import RunnerException, Runner
-from grader.tasks.base import TaskResult, LABEL_RN_ENTITY_TYPE, RNSEISM_BATCH_TASK, \
-    LABEL_RN_TASK_ID, LABEL_RN_JOB_ID, LABEL_RN_PROJECT_ID, LABEL_RN_USER_ID, LABEL_RN_TASK_TYPE, LABEL_RN_ID, \
+from grader.tasks.base import TaskResult, LABEL_ENTITY_TYPE, GRADER_BATCH_TASK, \
+    LABEL_TASK_ID, LABEL_JOB_ID, LABEL_PROJECT_ID, LABEL_USER_ID, LABEL_TASK_TYPE, LABEL_ID, \
     TaskContainerFailed, NodeType
 from rnseism_sdk.worker.base import ParametersManager
 from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
@@ -107,7 +107,6 @@ class ContainerRemovePolicy(enum.Enum):
             return False
 
         return True
-
 
 
 class BatchTaskExecutor(ABC):
@@ -192,11 +191,11 @@ class DockerBatchTaskExecutor(BatchTaskExecutor):
         self._container = self._client.containers.run(
             detach=True,
             labels={
-                LABEL_RN_ENTITY_TYPE: RNSEISM_BATCH_TASK,
-                LABEL_RN_TASK_ID: self._curr_task_id,
-                LABEL_RN_JOB_ID: self.run_args.job_id,
-                LABEL_RN_PROJECT_ID: self.run_args.project_id,
-                LABEL_RN_USER_ID: self.run_args.user_id
+                LABEL_ENTITY_TYPE: GRADER_BATCH_TASK,
+                LABEL_TASK_ID: self._curr_task_id,
+                LABEL_JOB_ID: self.run_args.job_id,
+                LABEL_PROJECT_ID: self.run_args.project_id,
+                LABEL_USER_ID: self.run_args.user_id
             },
             environment={
                 **(self.run_args.environment or dict()),
@@ -265,7 +264,7 @@ class DockerBatchTaskExecutor(BatchTaskExecutor):
                 self._container.remove()
         else:
             found_containers: List[Container] \
-                = self._client.containers.list(filters={'label': [f'{LABEL_RN_TASK_ID}={self._curr_task_id}']})
+                = self._client.containers.list(filters={'label': [f'{LABEL_TASK_ID}={self._curr_task_id}']})
 
             if len(found_containers) > 1:
                 logger.error(f"Found more than one container with task_id {self._curr_task_id} for removing. "
@@ -302,12 +301,12 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
             image=self.run_args.image,
             labels={
                 **self._manager.base_labels(),
-                LABEL_RN_ID: self._curr_task_id,
-                LABEL_RN_TASK_ID: self._curr_task_id,
-                LABEL_RN_TASK_TYPE: RNSEISM_BATCH_TASK,
-                LABEL_RN_PROJECT_ID: self.run_args.project_id,
-                LABEL_RN_JOB_ID: self.run_args.job_id,
-                LABEL_RN_USER_ID: self.run_args.user_id
+                LABEL_ID: self._curr_task_id,
+                LABEL_TASK_ID: self._curr_task_id,
+                LABEL_TASK_TYPE: GRADER_BATCH_TASK,
+                LABEL_PROJECT_ID: self.run_args.project_id,
+                LABEL_JOB_ID: self.run_args.job_id,
+                LABEL_USER_ID: self.run_args.user_id
             },
             node_selector={
                 LABEL_K8S_OWNER: GRADER,
@@ -406,12 +405,12 @@ class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
             image=run_args.image,
             labels={
                 **self._manager.base_labels(),
-                LABEL_RN_ID: self._curr_task_id,
-                LABEL_RN_TASK_ID: self._curr_task_id,
-                LABEL_RN_TASK_TYPE: RNSEISM_BATCH_TASK,
-                LABEL_RN_PROJECT_ID: run_args.project_id,
-                LABEL_RN_JOB_ID: run_args.job_id,
-                LABEL_RN_USER_ID: run_args.user_id
+                LABEL_ID: self._curr_task_id,
+                LABEL_TASK_ID: self._curr_task_id,
+                LABEL_TASK_TYPE: GRADER_BATCH_TASK,
+                LABEL_PROJECT_ID: run_args.project_id,
+                LABEL_JOB_ID: run_args.job_id,
+                LABEL_USER_ID: run_args.user_id
             },
             node_selector={
                 LABEL_K8S_OWNER: GRADER,
@@ -491,56 +490,3 @@ def run_kubernetes_batch_task(token: str, curr_task_uid: str, args: Dict[str, An
         return SparkOnK8sBatchTasksExecutor(token, curr_task_uid, args).run()
 
     return KubernetesBatchTasksExecutor(token, curr_task_uid, args).run()
-
-
-# run_interactive_task.apply_async(args=[kwargs], queue='iw_team_a', routing_key='iw_team_a.run_interactive_task').get()
-# to test from ipython console run: add.delay(4, 4).get()
-# To test routing on different workers a and
-# Run on A: add.apply_async(args=[4, 4], queue='qw_a', routing_key='a.add').get() # result: 16
-# Run on B: add.apply_async(args=[4, 4], queue='qw_b', routing_key='b.add').get() # result: 24
-# TODO: register parsers for pydantic entities
-@shared_task
-def run_interactive_task(token: str, curr_task_uid: str, args: Dict[str, Any]) -> Dict[str, Any]:
-    run_args = InteractiveTaskRunArgs.parse_obj(args)
-
-    logger.info(f"Received task {curr_task_uid} with args: {run_args.dict()}")
-
-    # noinspection PyBroadException
-    try:
-        from geowsm.tasks.interactive_worker import current_runner
-
-        update_task_status(task_id=curr_task_uid, status=TaskStatus.RUNNING)
-        logger.debug(f"Updated status of task {curr_task_uid} to {TaskStatus.RUNNING}")
-
-        result = current_runner().run(
-            auth_token=token,
-            task_id=curr_task_uid,
-            job_id=run_args.job_id,
-            session_id=run_args.session_id,
-            **run_args.parameters
-        )
-
-        logger.info(f"Computed task {curr_task_uid} and received result: {result}")
-
-        update_task_status(task_id=curr_task_uid, status=TaskStatus.FINISHED)
-        logger.debug(f"Updated status of task {curr_task_uid} to {TaskStatus.FINISHED}")
-
-        # TODO: add saving to results
-        return TaskResult(task_id=curr_task_uid, result=result).dict()
-    except RunnerException as ex:
-        logger.warning(f"Task {curr_task_uid} failed. Updating status to {TaskStatus.FAILED}", exc_info=True)
-        update_task_status(task_id=curr_task_uid, status=TaskStatus.FAILED)
-        report_task_fail_reason(task_id=curr_task_uid, error_message=repr(ex), error_full=traceback.format_exc())
-        raise
-    except SoftTimeLimitExceeded as ex:
-        logger.warning(f"Task {curr_task_uid} either was cancelled (by user) or exceeded time limit."
-                       f" Updating status to {TaskStatus.CANCELLED}")
-        update_task_status(task_id=curr_task_uid, status=TaskStatus.CANCELLED)
-        report_task_fail_reason(task_id=curr_task_uid, error_message=repr(ex), error_full=traceback.format_exc())
-        raise
-    except Exception as ex:
-        logger.error(f"Unexpected exception happened for task with id {curr_task_uid}. "
-                     f"Updating status to {TaskStatus.FAILED}", exc_info=True)
-        update_task_status(task_id=curr_task_uid, status=TaskStatus.FAILED)
-        report_task_fail_reason(task_id=curr_task_uid, error_message=repr(ex), error_full=traceback.format_exc())
-        raise

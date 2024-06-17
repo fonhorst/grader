@@ -12,20 +12,19 @@ from grader.db.tasks import Task, TaskStatus, TaskType, list_tasks, get_task
 # from rnseism_sdk.db.tasks import Task, list_tasks, get_task, TaskStatus, TaskType, DateTimeType
 # from rnseism_sdk.sdk.base import DataStorage
 
-RNSEISM_INTERACTIVE_WORKER = 'interactive-worker'
-RNSEISM_BATCH_WORKER = 'batch-worker'
-RNSEISM_BATCH_TASK = 'batch-task'
+GRADER_BATCH_WORKER = 'batch-worker'
+GRADER_BATCH_TASK = 'batch-task'
 
 
-LABEL_RN_ID = 'rn_id'
-LABEL_RN_ENTITY_TYPE = 'rn_entity_type'
-LABEL_RN_ENTITY_NAME = 'rn_entity_name'
-LABEL_RN_TASK_ID = 'rn_task_id'
-LABEL_RN_TASK_TYPE = 'rn_task_type'
-LABEL_RN_PROJECT_ID = 'rn_project_id'
-LABEL_RN_STORAGE_ID = 'rn_storage_id'
-LABEL_RN_JOB_ID = 'rn_job_id'
-LABEL_RN_USER_ID = 'rn_user_id'
+LABEL_ID = 'grader_id'
+LABEL_ENTITY_TYPE = 'grader_entity_type'
+LABEL_ENTITY_NAME = 'grader_entity_name'
+LABEL_TASK_ID = 'grader_task_id'
+LABEL_TASK_TYPE = 'grader_task_type'
+LABEL_PROJECT_ID = 'grader_project_id'
+LABEL_STORAGE_ID = 'grader_storage_id'
+LABEL_JOB_ID = 'grader_job_id'
+LABEL_USER_ID = 'grader_user_id'
 
 
 class TaskInfo(BaseModel):
