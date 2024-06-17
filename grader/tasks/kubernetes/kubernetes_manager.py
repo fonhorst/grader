@@ -10,8 +10,9 @@ from kubernetes.client import V1NodeList, V1Node, V1PersistentVolume, V1Persiste
     V1PodStatus, V1ContainerStateTerminated
 from kubernetes.utils import parse_quantity
 
-from rnseism_sdk.db.tasks import TaskStatus
-from rnseism_sdk.envs import DEFAULT_WORKER_CONFIG_PATH
+from grader.env import DEFAULT_WORKER_CONFIG_PATH
+
+from grader.db.tasks import TaskStatus
 from grader.tasks.base import LABEL_RN_PROJECT_ID, LABEL_RN_STORAGE_ID, LABEL_RN_ID, LABEL_RN_TASK_ID, \
     TaskContainerFailed, TaskContainerExecutionTimeout, NodeType
 from grader.tasks.nodes import Node, Volume, NetworkStorage, \
@@ -19,25 +20,16 @@ from grader.tasks.nodes import Node, Volume, NetworkStorage, \
     KubernetesException, NoSuchVolumeException, VolumeAlreadyExistsException
 
 WORKER_CONFIG_CONFIG_MAP_KEY = 'worker_config.yaml'
-
-RNSEISM = 'rnseism'
-
+GRADER = 'rnseism'
 K8S_ACCESS_FILE_LOCK = "k8s_access_file_lock.txt.lock"
-
-# Kube Nodes Labels
-LABEL_K8S_RN_OWNER= 'owner'
-LABEL_K8S_RN_NODE_TYPE_LABEL_KEY = 'rn_node_type'
-LABEL_K8S_RN_PRIORITY_PROJECT_ID = 'rn_priority_project_id'
-
-
-K8S_RNSEISM_BASE_LABEL = f'{LABEL_K8S_RN_OWNER}={RNSEISM}'
-K8S_RNSEISM_INTERACTIVE_NODE_LABEL = f'{LABEL_K8S_RN_NODE_TYPE_LABEL_KEY}={NodeType.interactive.value}'
-K8S_RNSEISM_COMPUTE_NODE_LABEL = f'{LABEL_K8S_RN_NODE_TYPE_LABEL_KEY}={NodeType.compute.value}'
+LABEL_K8S_OWNER= 'owner'
+K8S_BASE_LABEL = f'{LABEL_K8S_OWNER}={GRADER}'
 
 
 logger = logging.getLogger(__name__)
 
 _TEN_GYGABYTES = 10 * 1024 * 1024 * 1024
+
 
 def size2bytes(size: str) -> int:
     return int(parse_quantity(size))
@@ -62,19 +54,6 @@ def k8s_status_to_task_status(status: str) -> TaskStatus:
         return TaskStatus.FAILED
 
     raise ValueError(f"Unsupported pod status {status}. Cannot convert it to TaskStatus")
-
-
-def k8s_status_to_iworker_status(status: str) -> InteractiveWorkerStatus:
-    if status == 'Pending':
-        return InteractiveWorkerStatus.running
-    if status == 'Running':
-        return InteractiveWorkerStatus.running
-    if status == 'Succeeded':
-        return InteractiveWorkerStatus.stopped
-    if status == 'Failed':
-        return InteractiveWorkerStatus.failed
-
-    raise ValueError(f"Unsupported pod status {status}. Cannot convert it to InteractiveWorkerStatus")
 
 
 class KubernetesManager:
@@ -112,7 +91,7 @@ class KubernetesManager:
 
     @staticmethod
     def base_labels() -> Dict[str, str]:
-        key, value = K8S_RNSEISM_BASE_LABEL.split('=')
+        key, value = K8S_BASE_LABEL.split('=')
         return {key: value}
 
     def validate_volumes_sizes(self):
@@ -430,75 +409,11 @@ class KubernetesManager:
 
             time.sleep(status_check_time_interval)
 
-    def list_nodes(self, node_type: Optional[NodeType] = None) -> List[Node]:
-        if not node_type:
-            label_selector = [K8S_RNSEISM_BASE_LABEL]
-        elif node_type == NodeType.interactive:
-            label_selector = [K8S_RNSEISM_BASE_LABEL, K8S_RNSEISM_INTERACTIVE_NODE_LABEL]
-        else:
-            label_selector = [K8S_RNSEISM_BASE_LABEL, K8S_RNSEISM_COMPUTE_NODE_LABEL]
-
-        label_selector = ','.join(label_selector)
-
-        try:
-            kube_nodes = cast(V1NodeList, self._client.list_node(label_selector=label_selector))
-        except ApiException as ex:
-            raise KubernetesException() from ex
-
-        nodes = [self._from_k8s_node(node) for node in kube_nodes.items]
-        return nodes
-
-    def get_node(self, node_uid: str) -> Optional[Node]:
-        try:
-            node = self._client.read_node(name=node_uid)
-        except ApiException as ex:
-            if ex.status != 404:
-                raise KubernetesException() from ex
-            return None
-
-        if node.metadata.labels.get(LABEL_K8S_RN_OWNER, None) != RNSEISM:
-            return None
-
-        return self._from_k8s_node(node)
-
-    def set_node_priority_project(self, node_uid: str, project_uid: str, force: bool = False) -> Node:
-        return self._update_priority_project(node_uid, project_uid=project_uid, force=force)
-
-    def unset_node_priority_project(self, node_uid: str) -> Node:
-        return self._update_priority_project(node_uid, project_uid=None)
-
-    def list_storages(self, project_uid: Optional[str] = None) -> List[NetworkStorageVolume]:
-        volumes = self.list_storage_volumes(project_uid)
-
-        if len(volumes) == 0 and project_uid:
-            volumes = [
-                Volume(uid=None, storage_uid=nst.uid, project_uid=project_uid, size_bytes=0)
-                for nst in self._network_storages.values()
-            ]
-
-        storage_uids = {volume.storage_uid for volume in volumes}
-        storage_allocated_sizes = {
-            storage_uid: self._calculate_allocated_space_size(storage_uid)
-            for storage_uid in storage_uids
-        }
-        return [
-            NetworkStorageVolume(
-                uid=volume.uid,
-                storage_uid=volume.storage_uid,
-                project_uid=volume.project_uid,
-                volume_size_bytes=volume.size_bytes,
-                storage_size_bytes=self._network_storages[volume.storage_uid].size_bytes,
-                allocated_size_bytes=storage_allocated_sizes[volume.storage_uid],
-                network_storage_base_host_path=self._network_storages[volume.storage_uid].network_storage_base_host_path
-            )
-            for volume in volumes
-        ]
-
     def list_storage_volumes(self, project_uid: Optional[str] = None) -> List[Volume]:
         if project_uid:
-            label_selector = [K8S_RNSEISM_BASE_LABEL, f'{LABEL_RN_PROJECT_ID}={project_uid}']
+            label_selector = [K8S_BASE_LABEL, f'{LABEL_RN_PROJECT_ID}={project_uid}']
         else:
-            label_selector = [K8S_RNSEISM_BASE_LABEL]
+            label_selector = [K8S_BASE_LABEL]
 
         label_selector = ','.join(label_selector)
 
@@ -512,239 +427,6 @@ class KubernetesManager:
 
         return [self._from_k8s_volume_claim(v) for v in volume_claims]
 
-    def create_storage_volume(self, storage_uid: str, project_uid: str, size_bytes: int) -> Volume:
-        with self._lock():
-            return self._create_storage_volume(storage_uid, project_uid, size_bytes)
-
-    def delete_storage_volume(self, volume_uid: str, allow_missing: bool = False):
-        with self._lock():
-            self._delete_storage_volume(volume_uid, allow_missing)
-
-    def update_storage_volume(self, volume_uid: str, size_bytes: int) -> Volume:
-        logger.info("Updating volume %s to size %s" % (volume_uid, size_bytes))
-
-        with self._lock():
-            logger.debug("Reading current PVC info for volume %s" % volume_uid)
-
-            try:
-                volume_claim = self._client.read_namespaced_persistent_volume_claim(
-                    namespace=self._namespace,
-                    name=volume_uid
-                )
-            except ApiException as ex:
-                raise KubernetesException() from ex
-
-            volume = self._from_k8s_volume_claim(volume_claim)
-            storage = self._get_storage(volume.storage_uid)
-
-            # check size of new volume is bigger than the existing one (we cannot reduce size of the volume)
-            if volume.size_bytes >= size_bytes:
-                raise VolumeSizeException(f"Cannot update volume {volume_uid} because "
-                                          f"its current size {volume.size_bytes} is greater "
-                                          f"or equal to new size {size_bytes}")
-
-            # calculate if we are able to increase size
-            self._check_if_possible_to_allocate(storage, size_bytes - volume.size_bytes)
-
-            # delete the old volume
-            self._delete_storage_volume(volume_uid)
-
-            # sometimes the entity is stil presented in list of pvc possibly due to ongoing termination
-            time.sleep(1)
-
-            # create the new one
-            volume = self._create_storage_volume(
-                storage_uid=volume.storage_uid,
-                project_uid=volume.project_uid,
-                size_bytes=size_bytes
-            )
-
-        logger.info("Successfully updated volume %s to size %s" % (volume_uid, size_bytes))
-
-        return volume
-
-    def _create_storage_volume(self, storage_uid: str, project_uid: str, size_bytes: int) -> Volume:
-        logging.info(
-            "Creating volume of %s bytes for project %s in storage %s" % (size_bytes, project_uid, storage_uid)
-        )
-
-        storage = self._get_storage(storage_uid)
-
-        self._check_if_possible_to_allocate(storage, size_bytes)
-
-        uid = str(uuid.uuid4())
-        volume_name = f'net-storage-{storage_uid}-{project_uid}'
-
-        logger.debug(
-            "Creating persistent volume %s for project %s in storage %s" % (volume_name, project_uid, storage_uid)
-        )
-
-        body = {
-            'metadata':
-                {
-                    'name': volume_name,
-                    'labels': {
-                        **self.base_labels(),
-                        LABEL_RN_STORAGE_ID: storage.uid,
-                        LABEL_RN_PROJECT_ID: project_uid,
-                        LABEL_RN_ID: uid
-                    }
-                },
-            'spec': {
-                'capacity':{
-                    'storage': size_bytes
-                },
-                'volumeMode': 'Filesystem',
-                'accessModes': ['ReadWriteMany'],
-                'persistentVolumeReclaimPolicy': 'Retain',
-                'storageClassName': storage.uid,
-                'hostPath': {
-                    'path': storage.network_storage_base_host_path,
-                    'type': 'DirectoryOrCreate'
-                }
-            }
-        }
-        try:
-            cast(V1PersistentVolume, self._client.create_persistent_volume(body=body))
-        except ApiException as ex:
-            if ex.status == 409:
-                raise VolumeAlreadyExistsException() from ex
-
-            raise KubernetesException() from ex
-
-        logger.debug(
-            "Creating persistent volume claim %s for project %s in storage %s" % (volume_name, project_uid, storage_uid)
-        )
-
-        body = {
-            'metadata':
-                {
-                    'name': volume_name,
-                    'labels': {
-                        **self.base_labels(),
-                        LABEL_RN_STORAGE_ID: storage.uid,
-                        LABEL_RN_PROJECT_ID: project_uid,
-                        LABEL_RN_ID: uid
-                    }
-                },
-            'spec': {
-                'storageClassName': storage.uid,
-                'accessModes': ['ReadWriteMany'],
-                'volumeName': volume_name,
-                'resources': {
-                    'requests': {
-                        'storage': size_bytes
-                    }
-                }
-            }
-        }
-
-        try:
-            volume_claim = cast(
-                V1PersistentVolumeClaim,
-                self._client.create_namespaced_persistent_volume_claim(namespace=self._namespace, body=body)
-            )
-        except ApiException as ex:
-            raise KubernetesException() from ex
-
-        logger.info(
-            "Successfully created volume %s for project %s in storage %s" % (volume_name, project_uid, storage_uid)
-        )
-
-        return self._from_k8s_volume_claim(volume_claim)
-
-    def _delete_storage_volume(self, volume_uid: str, allow_missing: bool = False):
-        logger.info(
-            "Deleting volume %s (allow_missing %s)" % (volume_uid, allow_missing)
-        )
-
-        try:
-            logger.debug("Deleting persistent volume claim %s" % volume_uid)
-            self._client.delete_namespaced_persistent_volume_claim(
-                name=volume_uid,
-                namespace=self._namespace,
-                grace_period_seconds=self._k8s_operation_timeout
-            )
-        except ApiException as ex:
-            if ex.status == 404 and allow_missing:
-                logger.warning("Persistent volume claim %s not found for deleting. Skip it and continue." % volume_uid)
-                pass
-            else:
-                raise NoSuchVolumeException(f"Can not delete volume {volume_uid}. "
-                                            f"PVC or/and PV with name {volume_uid} not found.") from ex
-        try:
-            self._client.delete_persistent_volume(
-                name=volume_uid,
-                grace_period_seconds=self._k8s_operation_timeout
-            )
-        except ApiException as ex:
-            if ex.status == 404 and allow_missing:
-                logger.warning("Persistent volume %s not found for deleting. Skip it and continue." % volume_uid)
-            else:
-                raise KubernetesException(f"Can not delete volume {volume_uid}. "
-                                          f"PVC or/and PV with name {volume_uid} not found.") from ex
-
-        logger.info("Succesfully deleted volume %s" % volume_uid)
-
-    def _lock(self) -> filelock.FileLock:
-        return filelock.FileLock(K8S_ACCESS_FILE_LOCK, timeout=self._k8s_filelock_timeout)
-
-    def _update_priority_project(self, node_uid: str, project_uid: Optional[str], force: bool = False) -> Node:
-        logger.info("Setting node %s as prioritized for project %s (force=%s)" % (node_uid, project_uid, force))
-
-        with self._lock():
-            logger.debug("Reading node %s labels" % node_uid)
-
-            try:
-                kube_node = cast(V1Node, self._client.read_node(name=node_uid))
-            except ApiException as ex:
-                raise KubernetesException() from ex
-
-            labels: Dict[str, str] = kube_node.metadata.labels
-
-            if project_uid is not None and LABEL_K8S_RN_PRIORITY_PROJECT_ID in labels and not force:
-                action = 'set priority project ' + str(project_uid) if project_uid else 'unset priority project'
-                raise NodeManagementException(f"Cannot {action} for node {node_uid} "
-                                              f"due to the node already has priority "
-                                              f"project {labels[LABEL_K8S_RN_PRIORITY_PROJECT_ID]} and force={force}")
-
-            logger.debug("Patching node %s labels" % node_uid)
-
-            body = {
-                "metadata": {
-                    "labels": {
-                        LABEL_K8S_RN_PRIORITY_PROJECT_ID: project_uid
-                    }
-                }
-            }
-            try:
-                kube_node = cast(V1Node, self._client.patch_node(name=node_uid, body=body))
-            except ApiException as ex:
-                raise KubernetesException() from ex
-
-        logger.info("Succesfully set node %s as prioritized for project %s (force=%s)" % (node_uid, project_uid, force))
-
-        return self._from_k8s_node(kube_node)
-
-    def _get_storage(self, storage_uid) -> NetworkStorage:
-        if storage_uid not in self._network_storages:
-            raise UnknownNetworkStorageException(f"Storage {storage_uid} is not supported. "
-                                        f"Available storages: {self._network_storages.keys()}")
-
-        storage = self._network_storages[storage_uid]
-        return storage
-
-    def _check_if_possible_to_allocate(self, storage: NetworkStorage, size_bytes: int):
-        allocated_size = self._calculate_allocated_space_size(storage.uid)
-        free_size = storage.size_bytes - allocated_size
-
-        logger.debug("Found allocated size %s for storage %s (asking to allocate %s bytes)"
-                     % (allocated_size, storage.uid, size_bytes))
-
-        if free_size < size_bytes:
-            raise VolumeSizeException(f"Not enough free space to allocate a new volume: "
-                                      f"available - {free_size}, requested - {size_bytes}")
-
     def _calculate_allocated_space_size(self, storage_uid: str) -> int:
         label_selector = ','.join([f'{LABEL_RN_STORAGE_ID}={storage_uid}'])
         try:
@@ -757,22 +439,6 @@ class KubernetesManager:
 
         allocated_size = sum(size2bytes(claim.spec.resources.requests['storage']) for claim in claims)
         return allocated_size
-
-    def _from_k8s_node(self, node: V1Node) -> Node:
-        addrs: Dict[str, str] = {addr.type: addr.address for addr in node.status.addresses}
-        name: str = node.metadata.name
-        labels: Dict[str, str] = node.metadata.labels
-        allocatable: Dict[str, str] = node.status.allocatable
-        rn_priority_project_id = labels.get(LABEL_K8S_RN_PRIORITY_PROJECT_ID, None)
-        return Node(
-            uid=name,
-            name=addrs['Hostname'],
-            ip=addrs['InternalIP'],
-            node_type=NodeType(labels[LABEL_K8S_RN_NODE_TYPE_LABEL_KEY]),
-            priority_project_id=rn_priority_project_id,
-            scratch_size_bytes=self._scratch_size_bytes,
-            hdd_size_bytes=allocatable['ephemeral-storage']
-        )
 
     @staticmethod
     def _from_k8s_volume_claim(volume_claim: V1PersistentVolumeClaim) -> Volume:

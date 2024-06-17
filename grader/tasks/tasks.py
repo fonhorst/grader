@@ -31,7 +31,7 @@ from grader.tasks.base import TaskResult, LABEL_RN_ENTITY_TYPE, RNSEISM_BATCH_TA
 from rnseism_sdk.worker.base import ParametersManager
 from grader.tasks.interactive_tasks import InteractiveTaskRunArgs
 from grader.tasks.kubernetes.kubernetes_manager import KubernetesManager, \
-    LABEL_K8S_RN_OWNER, RNSEISM, LABEL_K8S_RN_NODE_TYPE_LABEL_KEY
+    LABEL_K8S_OWNER, GRADER, LABEL_K8S_RN_NODE_TYPE_LABEL_KEY
 from grader.tasks.utils import try_pull_image
 from grader.tasks.batch_tasks_args import BatchTaskRunArgs, SparkOnK8sBatchTaskRunArgs
 
@@ -310,7 +310,7 @@ class KubernetesBatchTasksExecutor(BatchTaskExecutor):
                 LABEL_RN_USER_ID: self.run_args.user_id
             },
             node_selector={
-                LABEL_K8S_RN_OWNER: RNSEISM,
+                LABEL_K8S_OWNER: GRADER,
                 LABEL_K8S_RN_NODE_TYPE_LABEL_KEY: NodeType.compute.value
             },
             command=self.run_args.entrypoint,
@@ -414,7 +414,7 @@ class SparkOnK8sBatchTasksExecutor(KubernetesBatchTasksExecutor):
                 LABEL_RN_USER_ID: run_args.user_id
             },
             node_selector={
-                LABEL_K8S_RN_OWNER: RNSEISM,
+                LABEL_K8S_OWNER: GRADER,
                 LABEL_K8S_RN_NODE_TYPE_LABEL_KEY: NodeType.compute.value
             },
             command=self.run_args.entrypoint,

@@ -5,14 +5,10 @@ import os
 import uuid
 from typing import Optional, Dict, Union, Any, List, cast, Tuple
 
-from rnseism.models.base import Navigation
 from sqlalchemy import create_engine, String, UUID, TIMESTAMP, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship, joinedload
-from sqlalchemy.sql import text
-
-from rnseism_sdk.envs import ENV_VAR_RUNNER_DB_CONN, ENV_VAR_ECHO_DB_QUERY
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +260,6 @@ def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
                     curr_status = TaskStatus(task.status)
 
                     if not TaskStatus.can_proceed(curr_status, status):
-                        # TODO: custom exception is necessary here
                         raise ValueError(f"Cannot change status from {curr_status} to {status}")
 
                     dt = datetime.datetime.now()
