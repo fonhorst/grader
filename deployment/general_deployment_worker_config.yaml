@@ -1,0 +1,9 @@
+jobs_path: "/jobs"
+jobs: {}
+parameters_manager: "redis://geowsm-redis:6379/5"
+runner:
+  db_url: "postgresql://postgres:postgres@geowsm-postgresql:5432/wms"
+  storage_url: "rn-datastorage:80"
+  result_storage_url: "redis://geowsm-redis:6379/2"
+  state_storage_url: "redis://geowsm-redis:6379/3"
+  session_status_storage_url: "redis://geowsm-redis:6379/4"

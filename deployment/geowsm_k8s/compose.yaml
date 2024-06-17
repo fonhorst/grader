@@ -1,0 +1,160 @@
+services:
+  redis:
+    image: redis:7.2.0-alpine
+    networks:
+      - deploy_net
+    ports:
+      - "9094:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+
+  rabbitmq:
+    image: rabbitmq:3.12.3-alpine
+    ports:
+      - "9091:15672"
+      - "9090:5672"
+    networks:
+      - deploy_net
+    configs:
+      - source: rabbitmq_conf
+        target: /etc/rabbitmq/rabbitmq.conf
+      - source: rabbitmq_enabled_plugins
+        target: /etc/rabbitmq/enabled_plugins
+      - source: rabbitmq_consumer_settings
+        target: /etc/rabbitmq/conf.d/consumer-settings.conf
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  postgresql:
+    image: postgres:15.4-bookworm
+    networks:
+      - deploy_net
+    ports:
+      - "9093:5432"
+    environment:
+      - POSTGRES_DB=wms
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./postgresql-initdb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d wms" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:7.6
+    depends_on:
+      - postgresql
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "postgres@postgres.com"
+      PGADMIN_DEFAULT_PASSWORD: "postgres"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "9092:80"
+    networks:
+      - deploy_net
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower
+    depends_on:
+      - rabbitmq
+    ports:
+      - "9095:5555"
+    networks:
+      - deploy_net
+    environment:
+      CELERY_BROKER_URL: "amqp://guest:guest@rabbitmq:5672"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+
+  batch_worker:
+    image: iworker:latest
+    build:
+      context: ../..
+      dockerfile: ./docker/worker.dockerfile
+    depends_on:
+      - rabbitmq
+      - redis
+      - postgresql
+    command: [
+        "-A", "rnseism_sdk.worker.batch_worker", "worker",
+        "-Q", "kubernetes_batch_tasks",
+        "--pool=prefork", "--concurrency=4", "--loglevel=DEBUG"
+    ]
+    hostname: "batch_worker"
+    networks:
+      - deploy_net
+    environment:
+      CELERY_BROKER_URL: "amqp://guest:guest@rabbitmq:5672"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+      WMS_WORKER_NETWORK: "geowsm_k8s_deploy_net"
+      WMS_BATCH_WORKER_CONFIG_VOLUME: "/home/rn/geowsm/deployment/geowsm_k8s/worker_config.yaml"
+      WMS_BATCH_WORKER_DONT_REMOVE_FAILED_CONTAINER: "true"
+      WMS_RUNNER_DB_CONN: "postgresql://postgres:postgres@postgresql:5432/wms"
+      WMS_BATCH_WORKER_TYPE: 'kubernetes'
+      WMS_RUNNER_DB_CONN_EXTERNAL: "postgresql://postgres:postgres@10.32.0.243:9093/wms"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/rn/geowsm/deployment/geowsm_k8s/worker_config.yaml:/worker_config.yaml
+      - /home/rn/.kube/config:/root/.kube/config
+
+  geowsm:
+    image: geowsm:latest
+    build:
+      context: ../..
+      dockerfile: ./docker/geowsm.dockerfile
+    depends_on:
+      - rabbitmq
+      - redis
+      - postgresql
+      - batch_worker
+    hostname: "geowsm"
+    environment:
+      IGNORE_JWT_AUTH: "true"
+
+      CELERY_BROKER_URL: "amqp://guest:guest@rabbitmq:5672"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+
+      WMS_RESULT_STORAGE_URL: "redis://redis:6379/2"
+      WMS_SESSION_STATUS_STORAGE_URL: "redis://redis:6379/4"
+      WMS_BATCH_WORKER_CONFIG_VOLUME: "/home/rn/geowsm/deployment/geowsm_k8s/worker_config.yaml"
+
+      WMS_WORKER_NETWORK: "geowsm_k8s_deploy_net"
+      WMS_HANDLE_TUNINGS_MODE: "normal"
+      WMS_TUNINGS_PROJECTS_AND_USES_API_URL: "http://10.32.0.243:8094"
+
+      WMS_RUNNER_DB_CONN: "postgresql://postgres:postgres@postgresql:5432/wms"
+      WMS_EXECUTION_BACKEND: "kubernetes"
+
+      WMS_RUNNER_DB_CONN_EXTERNAL: "postgresql://postgres:postgres@10.32.0.243:9093/wms"
+      WMS_CELERY_BROKER_URL_EXTERNAL: "amqp://guest:guest@10.32.0.243:9090"
+      WMS_CELERY_RESULT_BACKEND_EXTERNAL: "redis://10.32.0.243:9094/1"
+    ports:
+      - "8097:5000"
+    networks:
+      - deploy_net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/rn/geowsm/deployment/geowsm_k8s/worker_config.yaml:/worker_config.yaml
+      - /home/rn/.kube/config:/root/.kube/config
+
+
+configs:
+  rabbitmq_consumer_settings:
+    file: ./consumer-settings.conf
+
+  rabbitmq_conf:
+    file: ./rabbitmq.conf
+
+  rabbitmq_enabled_plugins:
+    file: ./enabled_plugins
+
+networks:
+  deploy_net:

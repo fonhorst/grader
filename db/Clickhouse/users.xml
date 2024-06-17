@@ -1,0 +1,8 @@
+<clickhouse>
+    <profiles>
+        <!-- Overwrite default setting -->
+        <default>
+            <postgresql_connection_pool_auto_close_connection>1</postgresql_connection_pool_auto_close_connection>
+        </default>
+    </profiles>
+</clickhouse>

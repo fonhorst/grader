@@ -1,0 +1,9 @@
+jobs_path: "/jobs"
+jobs: {}
+parameters_manager: "redis://redis:6379/5"
+runner:
+  db_url: "postgresql://postgres:postgres@postgresql:5432/wms"
+  storage_url: "10.32.0.243:8095"
+  result_storage_url: "redis://redis:6379/2"
+  state_storage_url: "redis://redis:6379/3"
+  session_status_storage_url: "redis://redis:6379/4"

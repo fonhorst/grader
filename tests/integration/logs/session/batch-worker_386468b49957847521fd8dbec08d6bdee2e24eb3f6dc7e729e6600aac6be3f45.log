@@ -1,0 +1,129 @@
+DB_CONN postgresql://postgres:postgres@localhost:5432/wms
+/usr/local/lib/python3.10/site-packages/celery/platforms.py:829: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
+
+Please specify a different user using the --uid option.
+
+User information: uid=0 euid=0 gid=0 egid=0
+
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+celery@batch-worker worker has started
+Worker is initialized
+[2024-04-10 16:10:52,726: DEBUG/MainProcess] | Worker: Preparing bootsteps.
+[2024-04-10 16:10:52,728: DEBUG/MainProcess] | Worker: Building graph...
+[2024-04-10 16:10:52,728: DEBUG/MainProcess] | Worker: New boot order: {Beat, Timer, Hub, Pool, Autoscaler, StateDB, Consumer}
+[2024-04-10 16:10:52,736: DEBUG/MainProcess] | Consumer: Preparing bootsteps.
+[2024-04-10 16:10:52,737: DEBUG/MainProcess] | Consumer: Building graph...
+[2024-04-10 16:10:52,753: DEBUG/MainProcess] | Consumer: New boot order: {Connection, Agent, Events, Mingle, Gossip, Tasks, Control, Heart, event loop}
+ 
+ -------------- celery@batch-worker v5.3.4 (emerald-rush)
+--- ***** ----- 
+-- ******* ---- Linux-6.5.0-0.rc7.20230821gitf7757129e3de.50.fc40.x86_64-x86_64-with-glibc2.36 2024-04-10 16:10:52
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         rnseism:0x7fc428e2a9b0
+- ** ---------- .> transport:   amqp://guest:**@localhost:5672//
+- ** ---------- .> results:     redis://localhost:6379/1
+- *** --- * --- .> concurrency: 2 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> kubernetes_batch_tasks exchange=kubernetes_batch_tasks(direct) key=kubernetes_batch_tasks
+                
+
+[tasks]
+  . celery.accumulate
+  . celery.backend_cleanup
+  . celery.chain
+  . celery.chord
+  . celery.chord_unlock
+  . celery.chunks
+  . celery.group
+  . celery.map
+  . celery.starmap
+  . geowsm.tasks.tasks.run_docker_batch_task
+  . geowsm.tasks.tasks.run_interactive_task
+  . geowsm.tasks.tasks.run_kubernetes_batch_task
+
+[2024-04-10 16:10:52,773: DEBUG/MainProcess] | Worker: Starting Hub
+[2024-04-10 16:10:52,773: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:52,773: DEBUG/MainProcess] | Worker: Starting Pool
+[2024-04-10 16:10:52,924: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:52,924: DEBUG/MainProcess] | Worker: Starting Consumer
+[2024-04-10 16:10:52,924: DEBUG/MainProcess] | Consumer: Starting Connection
+[2024-04-10 16:10:52,926: WARNING/MainProcess] /usr/local/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2024-04-10 16:10:52,930: DEBUG/MainProcess] Start from server, version: 0.9, properties: {'capabilities': {'publisher_confirms': True, 'exchange_exchange_bindings': True, 'basic.nack': True, 'consumer_cancel_notify': True, 'connection.blocked': True, 'consumer_priorities': True, 'authentication_failure_close': True, 'per_consumer_qos': True, 'direct_reply_to': True}, 'cluster_name': 'rabbit@6dcadf9f6e07', 'copyright': 'Copyright (c) 2007-2023 VMware, Inc. or its affiliates.', 'information': 'Licensed under the MPL 2.0. Website: https://rabbitmq.com', 'platform': 'Erlang/OTP 25.3.2.5', 'product': 'RabbitMQ', 'version': '3.12.3'}, mechanisms: [b'PLAIN', b'AMQPLAIN'], locales: ['en_US']
+[2024-04-10 16:10:52,931: INFO/MainProcess] Connected to amqp://guest:**@127.0.0.1:5672//
+[2024-04-10 16:10:52,931: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:52,931: DEBUG/MainProcess] | Consumer: Starting Events
+[2024-04-10 16:10:52,932: WARNING/MainProcess] /usr/local/lib/python3.10/site-packages/celery/worker/consumer/consumer.py:507: CPendingDeprecationWarning: The broker_connection_retry configuration setting will no longer determine
+whether broker connection retries are made during startup in Celery 6.0 and above.
+If you wish to retain the existing behavior for retrying connections on startup,
+you should set broker_connection_retry_on_startup to True.
+  warnings.warn(
+
+[2024-04-10 16:10:52,933: DEBUG/MainProcess] Start from server, version: 0.9, properties: {'capabilities': {'publisher_confirms': True, 'exchange_exchange_bindings': True, 'basic.nack': True, 'consumer_cancel_notify': True, 'connection.blocked': True, 'consumer_priorities': True, 'authentication_failure_close': True, 'per_consumer_qos': True, 'direct_reply_to': True}, 'cluster_name': 'rabbit@6dcadf9f6e07', 'copyright': 'Copyright (c) 2007-2023 VMware, Inc. or its affiliates.', 'information': 'Licensed under the MPL 2.0. Website: https://rabbitmq.com', 'platform': 'Erlang/OTP 25.3.2.5', 'product': 'RabbitMQ', 'version': '3.12.3'}, mechanisms: [b'PLAIN', b'AMQPLAIN'], locales: ['en_US']
+[2024-04-10 16:10:52,934: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:52,935: DEBUG/MainProcess] | Consumer: Starting Mingle
+[2024-04-10 16:10:52,935: INFO/MainProcess] mingle: searching for neighbors
+[2024-04-10 16:10:52,935: DEBUG/MainProcess] using channel_id: 1
+[2024-04-10 16:10:52,936: DEBUG/MainProcess] Channel open
+[2024-04-10 16:10:52,943: DEBUG/MainProcess] Start from server, version: 0.9, properties: {'capabilities': {'publisher_confirms': True, 'exchange_exchange_bindings': True, 'basic.nack': True, 'consumer_cancel_notify': True, 'connection.blocked': True, 'consumer_priorities': True, 'authentication_failure_close': True, 'per_consumer_qos': True, 'direct_reply_to': True}, 'cluster_name': 'rabbit@6dcadf9f6e07', 'copyright': 'Copyright (c) 2007-2023 VMware, Inc. or its affiliates.', 'information': 'Licensed under the MPL 2.0. Website: https://rabbitmq.com', 'platform': 'Erlang/OTP 25.3.2.5', 'product': 'RabbitMQ', 'version': '3.12.3'}, mechanisms: [b'PLAIN', b'AMQPLAIN'], locales: ['en_US']
+[2024-04-10 16:10:52,944: DEBUG/MainProcess] using channel_id: 1
+[2024-04-10 16:10:52,944: DEBUG/MainProcess] Channel open
+[2024-04-10 16:10:53,960: INFO/MainProcess] mingle: all alone
+[2024-04-10 16:10:53,960: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:53,960: DEBUG/MainProcess] | Consumer: Starting Gossip
+[2024-04-10 16:10:53,960: DEBUG/MainProcess] using channel_id: 2
+[2024-04-10 16:10:53,961: DEBUG/MainProcess] Channel open
+[2024-04-10 16:10:53,964: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:53,964: DEBUG/MainProcess] | Consumer: Starting Tasks
+[2024-04-10 16:10:53,968: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:53,968: DEBUG/MainProcess] | Consumer: Starting Control
+[2024-04-10 16:10:53,968: DEBUG/MainProcess] using channel_id: 3
+[2024-04-10 16:10:53,969: DEBUG/MainProcess] Channel open
+[2024-04-10 16:10:53,972: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:53,972: DEBUG/MainProcess] | Consumer: Starting Heart
+[2024-04-10 16:10:53,972: DEBUG/MainProcess] using channel_id: 1
+[2024-04-10 16:10:53,973: DEBUG/MainProcess] Channel open
+[2024-04-10 16:10:53,974: DEBUG/MainProcess] ^-- substep ok
+[2024-04-10 16:10:53,974: DEBUG/MainProcess] | Consumer: Starting event loop
+[2024-04-10 16:10:53,974: DEBUG/MainProcess] | Worker: Hub.register Pool...
+[2024-04-10 16:10:53,974: INFO/MainProcess] celery@batch-worker ready.
+[2024-04-10 16:10:53,975: DEBUG/MainProcess] basic.qos: prefetch_count->2
+[2024-04-10 16:10:54,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:10:54,439: INFO/MainProcess] Events of group {task} enabled by remote.
+[2024-04-10 16:10:59,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:04,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:09,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:13,974: DEBUG/MainProcess] heartbeat_tick : for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:13,974: DEBUG/MainProcess] heartbeat_tick : Prev sent/recv: None/None, now - 28/70, monotonic - 375487.149373061, last_heartbeat_sent - 375487.149371775, heartbeat int. - 60 for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:14,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:19,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:24,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:29,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:33,975: DEBUG/MainProcess] heartbeat_tick : for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:33,975: DEBUG/MainProcess] heartbeat_tick : Prev sent/recv: 28/70, now - 28/113, monotonic - 375507.150322354, last_heartbeat_sent - 375487.149371775, heartbeat int. - 60 for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:33,975: DEBUG/MainProcess] heartbeat_tick: sending heartbeat for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:34,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:39,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:44,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:49,441: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:53,978: DEBUG/MainProcess] heartbeat_tick : for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:53,978: DEBUG/MainProcess] heartbeat_tick : Prev sent/recv: 28/113, now - 29/155, monotonic - 375527.153523706, last_heartbeat_sent - 375527.153521225, heartbeat int. - 60 for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:11:54,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:11:59,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:04,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:09,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:13,980: DEBUG/MainProcess] heartbeat_tick : for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:12:13,980: DEBUG/MainProcess] heartbeat_tick : Prev sent/recv: 29/155, now - 29/197, monotonic - 375547.1552542, last_heartbeat_sent - 375527.153521225, heartbeat int. - 60 for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:12:13,980: DEBUG/MainProcess] heartbeat_tick: sending heartbeat for connection 4f53046e00e9408b967b86d5d42c65fb
+[2024-04-10 16:12:14,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:19,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:24,439: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]
+[2024-04-10 16:12:29,440: DEBUG/MainProcess] pidbox received method enable_events() [reply_to:None ticket:None]

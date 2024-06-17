@@ -1,0 +1,94 @@
+services:
+  redis:
+    image: redis:7.2.0-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - test_deploy_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+
+  rabbitmq:
+    image: rabbitmq:3.12.3-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - test_deploy_net
+    configs:
+      - source: rabbitmq_conf
+        target: /etc/rabbitmq/rabbitmq.conf
+      - source: rabbitmq_enabled_plugins
+        target: /etc/rabbitmq/enabled_plugins
+      - source: rabbitmq_consumer_settings
+        target: /etc/rabbitmq/conf.d/consumer-settings.conf
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  postgresql:
+    image: postgres:15.4-bookworm
+    ports:
+      - "5432:5432"
+    networks:
+      - test_deploy_net
+    environment:
+      - POSTGRES_DB=wms
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./postgresql-initdb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d wms" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:7.6
+    depends_on:
+      - postgresql
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "postgres@postgres.com"
+      PGADMIN_DEFAULT_PASSWORD: "postgres"
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - test_deploy_net
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower
+    depends_on:
+      - rabbitmq
+    ports:
+      - "5555:5555"
+    networks:
+      - test_deploy_net
+    environment:
+      CELERY_BROKER_URL: "amqp://guest:guest@rabbitmq:5672"
+      CELERY_RESULT_BACKEND: "redis://redis:6379/1"
+
+configs:
+  rabbitmq_consumer_settings:
+    file: ./consumer-settings.conf
+
+  rabbitmq_conf:
+    file: ./rabbitmq.conf
+
+  rabbitmq_enabled_plugins:
+    file: ./enabled_plugins
+
+#  jobs_folder:
+#    file: ./job_examples
+#
+#  iworker_conf:
+#    file: ./iworker_config.yaml
+
+networks:
+  test_deploy_net:

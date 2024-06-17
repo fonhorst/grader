@@ -1,0 +1,50 @@
+directed: true
+graph: {}
+links:
+- order: 0
+  source: R
+  target: W
+  type: arg
+multigraph: false
+nodes:
+- id: R
+  kwargs:
+    datastorage_host_port: 10.32.0.243:8095
+    filters:
+      '@headers':
+        INLINE:
+          $gte: 1009
+          $lte: 1025
+        XLINE:
+          $gte: 4936
+          $lte: 5001
+    group_by:
+    - INLINE
+    - XLINE
+    navigation: {}
+    order_by:
+    - INLINE
+    - XLINE
+    - SP_RECNB
+    tunings:
+      headers:
+      - INLINE
+      - XLINE
+      - SP_RECNB
+      - ACQ_CHN
+      - SP_NB
+      - CRL_ND
+      - CDP_TRACE
+      - OFF_NB
+      - RCV_Z
+      - SP_Z
+      include:
+      - samples
+    uuid: c04460317c094097ada6d58f86cf8946
+  op: GatherIO.read
+- id: W
+  kwargs:
+    datastorage_host_port: 10.32.0.243:8095
+    overwrite: true
+    uuid: d4ed5a0c62b040f4acbdc0607089f535
+  op: GatherWriteStep

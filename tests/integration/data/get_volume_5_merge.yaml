@@ -1,0 +1,106 @@
+directed: true
+graph: {}
+links:
+- order: 0
+  source: R1
+  target: P1
+  type: arg
+- order: 0
+  source: R2
+  target: Merge
+  type: arg
+- order: 0
+  source: P1
+  target: Merge
+  type: arg
+- order: 0
+  source: Merge
+  target: P2
+  type: arg
+- order: 0
+  source: P2
+  target: P3
+  type: arg
+- order: 0
+  source: P3
+  target: W
+  type: arg
+multigraph: false
+nodes:
+- id: R1
+  kwargs: &id001
+    datastorage_host_port: 10.32.0.243:8095
+    filters:
+      '@headers':
+        inline:
+          $gte: 1100
+          $lte: 1300
+        xline:
+          $gte: 4100
+          $lte: 4101
+    group_by:
+    - inline
+    - xline
+    order_by:
+    - inline
+    - xline
+    - CDP_X
+    tunings:
+      headers:
+      - inline
+      - xline
+      - CDP_X
+      - CDP_Y
+      include:
+      - samples
+    uuid: 42f1bbe219564a0784416a16ac75f938
+  op: VolumeIO.read
+- id: R2
+  kwargs: *id001
+  op: VolumeIO.read
+- id: P1
+  kwargs:
+    param_a: 1
+    param_b: 2.0
+  op: HMathStep
+- id: Merge
+  kwargs:
+    on_columns:
+    - inline
+    - xline
+  op: Merge
+- id: P2
+  kwargs:
+    param_a: 10
+    param_b: 20.1
+  op: HMathStep
+- id: P3
+  kwargs:
+    param_a: 100
+    param_b: 200.2
+  op: HMathStep
+- id: W
+  kwargs:
+    datastorage_host_port: 10.32.0.243:8095
+    header_columns:
+    - - inline
+      - Int32
+    - - xline
+      - Int32
+    - - CDP_X
+      - Int32
+    - - CDP_Y
+      - Int32
+    project_uuid: 00000000-0000-0000-0000-000000000001
+    props:
+      dataType: VELOCITY
+      domain: TIME
+      format: Float32
+      gridUuid: dbf08dc7-0d2f-4443-9761-a4e0e4035720
+      measurement: s
+      sampleRate: 0.02
+      samplesCount: 1501
+      srd: 0.02
+      summationType: IL+XL
+    volume_name: test
+  op: VolumeWriteStep

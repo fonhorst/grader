@@ -1,0 +1,22 @@
+jobs_path: "/jobs"
+jobs: {}
+parameters_manager: "redis://10.32.0.243:9094/5"
+kubernetes_manager:
+  network_storages:
+    - uid: "astorage"
+      size_bytes: 10737418240
+      network_storage_base_host_path: "/mnt/ess_storage/DN_1/tmp/test_rnseism_storages/storage_a"
+    - uid: "bstorage"
+      size_bytes: 21474836480
+      network_storage_base_host_path: "/mnt/ess_storage/DN_1/tmp/test_rnseism_storages/storage_b"
+  namespace: "rnseism-wms",
+  scratch_size_bytes: 10737418240
+  k8s_filelock_timeout: 5,
+  k8s_operation_timeout: 5,
+  k8s_default_config_map: "external-configmap"
+runner:
+  db_url: "postgresql://postgres:postgres@10.32.0.243:9093/wms"
+  storage_url: "10.32.0.243:8095"
+  result_storage_url: "redis://10.32.0.243:9094/2"
+  state_storage_url: "redis://10.32.0.243:9094/3"
+  session_status_storage_url: "redis://10.32.0.243:9094/4"
