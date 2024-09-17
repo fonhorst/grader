@@ -30,6 +30,7 @@ kubernetes = "^28.1.0"
 filelock = "^3.13.0"
 dill = "*"
 psutil = "^5.9.8"
+faststream = "^0.5.23"
 
 [tool.poetry.scripts]
 grader = "grader.main:main"
