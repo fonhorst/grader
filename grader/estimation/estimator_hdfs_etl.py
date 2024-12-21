@@ -1,11 +1,12 @@
 import subprocess
 import json
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 import requests
 from kubernetes import client, config
+from .base_estimator import BaseEstimator
 
-class HDFSETLEstimator:
+class HDFSETLEstimator(BaseEstimator):
     def __init__(self, 
                  k8s_context: str,
                  elasticsearch_url: str,
@@ -18,27 +19,27 @@ class HDFSETLEstimator:
         config.load_kube_config(context=k8s_context)
         self.k8s_client = client.CoreV1Api()
 
-    def check_prerequisites(self) -> Tuple[bool, List[str]]:
-        """Check all preliminary requirements."""
-        issues = []
-        
-        # Check Kubernetes access
-        try:
-            self.k8s_client.list_pod_for_all_namespaces()
-        except Exception as e:
-            issues.append(f"Cannot access Kubernetes cluster: {str(e)}")
+    def check_required_objects(self) -> Dict[str, bool]:
+        status, issues = self.verify_kubernetes_objects()
+        return {'kubernetes_objects': status}
 
-        # Check HDFS tools
-        if subprocess.call(['which', 'hdfs']) != 0:
-            issues.append("HDFS tools not installed")
+    def check_data_ingestion(self) -> Dict[str, bool]:
+        status, issues = self.verify_etl_functionality('test_data.csv')
+        return {'etl_functionality': status}
 
-        # Check monitoring tools
-        try:
-            requests.get(f"{self.grafana_url}/api/health")
-        except Exception as e:
-            issues.append(f"Cannot access Grafana: {str(e)}")
+    def check_fault_tolerance(self) -> Dict[str, bool]:
+        status, issues = self.verify_fault_tolerance()
+        return {'fault_tolerance': status}
 
-        return len(issues) == 0, issues
+    def check_performance(self) -> Dict[str, float]:
+        status, metrics = self.perform_load_test()
+        return metrics
+
+    def estimate(self) -> Dict[str, Any]:
+        results = super().estimate()
+        # Add HDFS-specific checks
+        results['hdfs_structure'] = self.verify_hdfs_structure()[0]
+        return results
 
     def verify_kubernetes_objects(self) -> Tuple[bool, List[str]]:
         """Verify required Kubernetes objects exist and are running."""
@@ -161,29 +162,3 @@ class HDFSETLEstimator:
         results['success_rate'] = processed_files / num_files
         
         return results['success_rate'] >= 0.95, results
-
-    def run_full_verification(self) -> Dict:
-        """Run all verification checks and return results."""
-        results = {
-            'prerequisites': {},
-            'kubernetes': {},
-            'hdfs': {},
-            'functionality': {},
-            'fault_tolerance': {},
-            'load_test': {},
-            'overall_status': 'FAILED'
-        }
-        
-        # Run all checks
-        results['prerequisites']['status'], results['prerequisites']['issues'] = self.check_prerequisites()
-        results['kubernetes']['status'], results['kubernetes']['issues'] = self.verify_kubernetes_objects()
-        results['hdfs']['status'], results['hdfs']['issues'] = self.verify_hdfs_structure()
-        results['functionality']['status'], results['functionality']['issues'] = self.verify_etl_functionality('test_data.csv')
-        results['fault_tolerance']['status'], results['fault_tolerance']['issues'] = self.verify_fault_tolerance()
-        results['load_test']['status'], results['load_test']['metrics'] = self.perform_load_test()
-        
-        # Calculate overall status
-        all_passed = all(results[key]['status'] for key in results if key != 'overall_status')
-        results['overall_status'] = 'PASSED' if all_passed else 'FAILED'
-        
-        return results

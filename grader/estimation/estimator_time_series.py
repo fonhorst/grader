@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from kubernetes import client, config
 from clickhouse_driver import Client as ClickHouseClient
 from kafka import KafkaAdminClient, KafkaConsumer, KafkaProducer
-from .estimator import BaseEstimator
+from .base_estimator import BaseEstimator
 
 class TimeSeriesEstimator(BaseEstimator):
     """Estimator for checking time series data processing capabilities."""

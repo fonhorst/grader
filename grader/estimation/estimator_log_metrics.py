@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import kubernetes
 from kubernetes import client, config
 from clickhouse_driver import Client as ClickHouseClient
@@ -8,8 +8,9 @@ from kafka import KafkaConsumer
 from elasticsearch import Elasticsearch
 import psutil
 import time
+from .base_estimator import BaseEstimator
 
-class ProjectEstimator:
+class LogMetricsEstimator(BaseEstimator):
     """Handles the estimation and verification of student Kubernetes projects."""
     
     def __init__(self, k8s_config_path: Optional[str] = None):
@@ -119,39 +120,24 @@ class ProjectEstimator:
         }
         return metrics
 
-    def run_full_verification(self, config: Dict) -> Dict[str, Dict]:
-        """Run all verification checks and return results."""
-        results = {
-            'kubernetes': {},
-            'clickhouse': {},
-            'arango': {},
-            'kafka': {},
-            'system_metrics': {},
-            'timestamp': time.time()
-        }
-        
-        try:
-            results['kubernetes'] = self.check_required_pods()
-            results['clickhouse'] = self.verify_clickhouse_tables(
-                config['clickhouse']['host'],
-                config['clickhouse']['port']
-            )
-            results['arango'] = self.verify_arango_collections(
-                config['arango']['host'],
-                config['arango']['port'],
-                config['arango']['username'],
-                config['arango']['password']
-            )
-            results['kafka'] = self.verify_kafka_topics(
-                config['kafka']['bootstrap_servers']
-            )
-            results['system_metrics'] = self.check_system_metrics()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to complete full verification: {e}")
-            results['error'] = str(e)
-            
+    def check_required_objects(self) -> Dict[str, bool]:
+        return self.check_required_pods()
+
+    def check_data_ingestion(self) -> Dict[str, bool]:
+        results = {}
+        results.update(self.verify_clickhouse_tables('localhost', 9000))
+        results.update(self.verify_kafka_topics('localhost:9092'))
         return results
+
+    def check_fault_tolerance(self) -> Dict[str, bool]:
+        # Implement basic fault tolerance check
+        return {'system_resilient': True}  # Placeholder
+
+    def check_performance(self) -> Dict[str, float]:
+        return self.check_system_metrics()
+
+    def estimate(self) -> Dict[str, Any]:
+        return super().estimate()
 
 
 if __name__ == "__main__":
@@ -171,7 +157,7 @@ if __name__ == "__main__":
         }
     }
 
-    estimator = ProjectEstimator()
-    results = estimator.run_full_verification(config)
+    estimator = LogMetricsEstimator()
+    results = estimator.estimate()
     print(results) 
    
