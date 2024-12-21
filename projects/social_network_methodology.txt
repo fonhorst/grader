@@ -1,0 +1,145 @@
+# Methodology for Checking the Correctness of Student Projects in Advanced Big Data Course
+
+## Prerequisites
+To perform the checking of the students' solutions, the following tools and setups must be in place:
+1. Kubernetes cluster where the solution has been deployed.
+2. Access to all necessary services, databases (ClickHouse, ArangoDB, Elasticsearch), and monitoring tools as mentioned in the project requirements.
+3. A predefined set of functional and non-functional requirements based on the project description.
+4. Tooling to perform workload testing (such as Apache JMeter or custom Python scripts).
+5. Reserved object names for checking the formal structure (tables, collections, services, etc.).
+
+## Predefined Reserved Names of Required Objects
+
+| Name        | Object Type     | Description                                          |
+|-------------|-----------------|------------------------------------------------------|
+| profiles    | Collection/Table | Stores user profile information (name, city, etc.).  |
+| streams     | Service          | Kafka service handling data ingestion.               |
+| clickhouse  | Database         | The storage solution for historical and actual data. |
+| monitoring  | Dashboard/Service | Dashboards for monitoring CPU, RAM, and IO usage.    |
+| dm_lifecycle | Data Mart       | Data mart lifecycle for specific data handling.      |
+
+## Steps to Check Correctness
+
+### 1. Checking for Presence of the Required Objects
+Ensure that the student’s solution contains all required components, databases, and services as specified in the predefined object list.
+
+- **SQL Query Example (for ClickHouse):**
+    ```sql
+    SHOW TABLES;
+    ```
+
+- **NoSQL Query Example (for ArangoDB):**
+    ```sql
+    FOR doc IN profiles RETURN doc
+    ```
+
+- **Web Request Example (for service endpoints):**
+    ```bash
+    curl http://<service-url>/healthcheck
+    ```
+
+### 2. Checking Functional Capabilities
+Ensure the solution performs the expected data collection, updates, and monitoring as described in the requirements:
+
+1. **Data Ingestion:**
+    Verify that the solution correctly ingests data from Kafka streams, ensuring no duplicates and no data loss.
+    
+    - **Query for duplicate detection in ClickHouse:**
+        ```sql
+        SELECT COUNT(*), user_id FROM profiles GROUP BY user_id HAVING COUNT(*) > 1;
+        ```
+
+    - **Kafka Topic Check:**
+        ```bash
+        kafka-topics --list --zookeeper <zookeeper_url>
+        ```
+
+2. **Data Update and Maintenance:**
+    Ensure that user profile data can be updated and changes are reflected in the database.
+
+    - **SQL Query for verifying recent updates in ClickHouse:**
+        ```sql
+        SELECT * FROM profiles WHERE last_updated > NOW() - INTERVAL 1 DAY;
+        ```
+
+3. **Full-text Search:**
+    Confirm that Elasticsearch is functioning properly and full-text searches are accurate.
+
+    - **Elasticsearch Query:**
+        ```bash
+        curl -X GET "http://<elasticsearch_url>/profiles/_search?q=city:Berlin"
+        ```
+
+4. **Dashboards:**
+    Verify the presence and functionality of monitoring dashboards for services and system resources.
+
+### 3. Checking for Formal Restrictions
+Verify that formal restrictions outlined in the project (such as containerized deployments, no bare-metal) are met.
+
+- **Command to check for Kubernetes containers:**
+    ```bash
+    kubectl get pods -o wide
+    ```
+
+- **Query to check Kubernetes resource limits:**
+    ```bash
+    kubectl describe pod <pod_name> | grep "Limits"
+    ```
+
+### 4. Checking for Fault-Tolerance
+Ensure that the system is fault-tolerant, as required. The solution should handle incorrect data extraction, system failures, and recover smoothly.
+
+- **Test for fault tolerance in Kafka:**
+    Stop one of the Kafka brokers and check if the system continues ingesting data from the streams.
+
+    - **Command to stop a Kafka broker:**
+        ```bash
+        kafka-server-stop.sh <broker_id>
+        ```
+
+    - **Check data persistence after stopping Kafka broker:**
+        ```bash
+        kafka-console-consumer.sh --bootstrap-server <kafka_broker> --topic <topic_name> --from-beginning
+        ```
+
+### 5. Workload Testing
+This section focuses on testing the non-functional capabilities under varying loads. Below is a detailed description of how to conduct workload testing:
+
+#### Data Generation
+1. **Frequency of Requests:** Generate data for 100,000 user profiles every 10 seconds.
+2. **Type of Data:** Random profiles with name, surname, city, and email information.
+3. **Volume:** The solution should handle up to 1 million requests per minute.
+
+#### Ingestion Testing
+- **Query to monitor the Kafka stream ingestion rate:**
+    ```bash
+    kafka-consumer-groups --describe --group <group_id>
+    ```
+
+#### Throughput and Latency Measurement
+- **Command to measure network I/O during data ingestion:**
+    ```bash
+    kubectl top pods
+    ```
+
+- **Script to generate workload and monitor system response time:**
+    ```python
+    import requests
+    for i in range(100000):
+        response = requests.post('http://<service-url>/ingest', json={"name": "John", "city": "Berlin"})
+        print(response.elapsed.total_seconds())
+    ```
+
+#### Data Query Performance Testing
+1. Perform complex SQL queries under heavy load to measure response times.
+
+    - **Example SQL Query:**
+        ```sql
+        SELECT city, COUNT(*) FROM profiles GROUP BY city;
+        ```
+
+    Measure the response time and check if it is within acceptable limits (< 2 seconds for queries under load).
+
+### Conclusion
+This methodology ensures that the students' solutions meet the required functional, non-functional, and formal constraints while also providing a comprehensive set of tests to validate deployment in a Kubernetes cluster. The methodology can be implemented as automated code checks for efficiency.
+

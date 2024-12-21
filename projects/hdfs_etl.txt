@@ -1,0 +1,87 @@
+## Assignment: Implementing an ETL pipeline using HDFS
+
+### Description of the task
+
+As part of this assignment, you need to develop a simple ETL pipeline that interacts with the Hadoop Distributed File System (HDFS). The pipeline must:
+
+1. Detect the appearance of new files in a given HDFS directory, where data is written by an external process.
+2. Reading the detected new files.
+3. Perform the specified data processing.
+4. Write the processed data to another directory on HDFS.
+
+### Data
+
+The files contain information about transactions in CSV format. Example of a file structure:
+
+| transaction_id | user_id | amount  | currency | timestamp           | status  |
+|----------------|---------|---------|----------|---------------------|---------|
+| 1              | 101     | 250.00  | USD      | 2023-12-20 10:00:00 | success |
+| 2              | 102     | 450.50  | EUR      | 2023-12-20 10:05:00 | failed  |
+| 3              | 103     | 100.00  | USD      | 2023-12-20 10:10:00 | success |
+
+- `transaction_id' is the unique identifier of the transaction.
+- `user_id' is the user's ID.
+- `amount` — the amount of the transaction.
+- `currency' — the currency of the transaction.
+- `timestamp' — the time of the transaction execution.
+- `status' — the status of the transaction (`success` or `failed`).
+
+### Data processing requirements
+
+1. Filter only successful transactions ('status = 'success').
+2. Convert the amounts of all transactions into one currency (USD) at the specified rates:
+- 1 EUR = 1.1 USD
+- 1 USD = 1 USD
+3. Aggregate data by date (format `YYYY-MM-DD'), counting:
+- The total amount of transactions.
+   - The number of transactions.
+   - The average transaction amount.
+4. Save the processed data in the following structure:
+
+| date       | total_amount | transaction_count | average_amount |
+|------------|--------------|-------------------|----------------|
+| 2023-12-20 | 350.00       | 2                 | 175.00         |
+
+### Implementation requirements
+
+1. **Change detection:**
+- The program should periodically check the target directory on HDFS for new files.
+   - Detection should be automatic (for example, using check intervals).
+
+2. **Data processing:**
+- Read the contents of the detected files.
+   - Perform the specified data processing.
+
+3. **Data recording:**
+   - All processed data should be written to HDFS using the structure `<main directory>/<current date>/aggregated_data.csv'.
+
+4. **Continuity:**
+- The code must run for a certain period of time (for example, 30 minutes) in order to demonstrate the ability to process several new files that appear during execution.
+
+5. **Monitoring and logging:**
+- Add logging to your program to record the following events:
+- New file detection.
+     - Successful file reading.
+     - Successful data conversion.
+     - Successful data recording in HDFS.
+
+### Technical requirements
+
+- Use Python (it is recommended to use the pydoop or hdfs libraries to work with HDFS).
+- The program must be containerized using Docker.
+- Pipeline deployment should be implemented using Kubernetes (for example, StatefulSet/Deployment).
+- Provide test data to verify your implementation (for example, several text files with different datasets).
+- Provide automated testing scenarios (for example, using 'pytest').
+- Your program must be fault tolerant to the following events:
+- Interruption of the data recording process.
+  - Unavailability of HDFS for a short time.
+
+### Evaluation criteria
+
+- Correctness of the ETL pipeline implementation.
+- Logging of all key events.
+- Correctness of processing of several files during the program operation time.
+- Compliance with containerization and deployment requirements.
+- Code quality (structure, comments, library usage).
+- Additional points for using asynchronous processing (for example, `asyncio').
+

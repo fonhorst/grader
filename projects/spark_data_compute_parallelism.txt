@@ -1,0 +1,82 @@
+### Assignment for students on the topic: "Implementing an Apache Spark application for distributed machine learning model learning"
+
+#### Goal:
+Create an Apache Spark-based application that effectively uses data and computing parallelism for data preparation and distributed machine learning model learning.
+
+---
+
+### Application Requirements:
+
+1. **Data preparation using data parallelism:**
+- Read data from a specified source (for example, HDFS, Kafka or S3).
+   - Perform data processing (for example, cleaning, aggregation, transformation) using parallel operations.
+
+2. **Distributed model training:**
+- Use OpenMPI or its equivalent to organize the process of distributed training of several instances of the model.
+   - Implement parallelism in both data and computing to speed up learning.
+
+3. **Resource management:**
+- The part responsible for data processing must be able to dynamically request and release resources (executors) to optimize work.
+   - Part of the training should be configured to use a different resource profile for more intensive calculations.
+
+4. **Repartitioning and coalescing:**
+- Ensure proper partitioning of data between processes to minimize unnecessary shuffle operations.
+   - Use bucketing to prevent redundant shuffle operations.
+
+5. **Hyperparametric search:**
+- Implement training of several instances of the model in parallel to select optimal hyperparameters.
+
+6. **Performance testing:**
+   - Test the application on a dataset of at least 1 million records.
+   - Measure data preparation time and model training time.
+
+---
+
+### Instructions for implementation:
+
+1. **Infrastructure preparation:**
+- Deploy the Apache Spark cluster in Kubernetes (you can use Minikube for local testing).
+   - Configure OpenMPI to work with distributed processes.
+
+2. **Data processing implementation:**
+- Write a Spark script for reading, processing, and preparing data.
+   - Set up data repartitioning and minimize shuffle operations.
+
+3. **Implementation of distributed learning:**
+- Implement model training using SparkML or PySpark in combination with OpenMPI.
+   - Provide parallel execution of several instances of the model for hyperparametric search.
+
+4. **Deployment and testing:**
+- Deploy the application on a Kubernetes cluster.
+   - Perform performance testing and evaluate how the execution time changes with an increase in the amount of data or the number of hyperparameters.
+
+5. **Reporting:**
+   - Provide a report describing the architecture of the solution, screenshots of load graphs for Spark Executors, as well as the results of model training.
+
+---
+
+### Evaluation criteria:
+
+1. **Functionality (50%):**
+- Correctness of data processing and distributed learning.
+   - Correct implementation of parallelism.
+
+2. **Performance (20%):**
+- Successful execution on a large amount of data with minimal time.
+
+3. **Code quality (10%):**
+- Code clarity and readability.
+   - Availability of comments.
+
+4. **Resource usage (10%):**
+   - Efficient use of cluster resources (minimizing redundant shuffle and proper bucketing configuration).
+
+5. **Documentation (10%):**
+- Description of the solution architecture and provided screenshots/results.
+
+---
+
+### Delivery format:
+- A repository with code and instructions for deployment.
+- Archive with logs and test results.
+- The report is in PDF format.

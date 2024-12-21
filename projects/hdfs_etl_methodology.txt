@@ -1,0 +1,120 @@
+# Project verification methodology: ETL pipeline for HDFS
+
+## Preliminary requirements
+Before starting the check, make sure that the following resources are available:
+1. **Access to the Kubernetes cluster**: Check that the pipeline is deployed correctly using containers.
+2. **Tools for working with HDFS**: Installed `hdfs dfs` or Python libraries (`pydoop`, `hdfs`).
+3. **Test dataset**: Predefined CSV files for testing functionality.
+4. **Monitoring tools**: Grafana and Prometheus for collecting performance metrics.
+5. **Logging**: Make sure that the logging verification tools ('ELK Stack' or similar) are used.
+
+## Reserved object names
+
+| Name | Type of object | Description |
+|--------------------|-------------------|-----------------------------------------------|
+| `input_data`        | HDFS directory | Input data for the pipeline.                 |
+| `processed_data`    | HDFS directory | Processed data after ETL.               |
+| `etl_pipeline`      | Kubernetes Pod | The main component of data processing.          |
+| `file_watcher`      | Kubernetes Pod | A component for monitoring new files in HDFS.    |
+| `etl_logs`          | Elasticsearch Index | ETL pipeline logs.                          |
+| `dashboards`        | Grafana Dashboard | Monitoring file processing and performance. |
+
+---
+
+## Verification stages
+
+### 1. Checking the availability of required objects
+#### Kubernetes
+1. Make sure that all pods and services are active:
+   ```bash
+   kubectl get pods
+   kubectl get services
+   ```
+2. Check that the `etl_pipeline` and `file_watcher` components are running.
+
+#### HDFS
+1. Check that the 'input_data` and `processed_data` directories exist:
+``bash
+   hdfs dfs -ls /input_data
+   hdfs dfs -ls /processed_data
+   ```
+
+2. Make sure that the access rights to the directories are correct:
+   ```bash
+   hdfs dfs -ls -R /input_data
+   ```
+
+---
+
+### 2. Checking functionality
+#### Uploading data to HDFS
+1. Copy the test files to the `input_data` directory:
+   ```bash
+   hdfs dfs -put test_data.csv /input_data/
+   ```
+2. Check that the file has appeared successfully.:
+   ```bash
+   hdfs dfs -ls /input_data
+   ```
+
+#### Data processing
+1. Make sure that the new file has been detected by `file_watcher' (check the logs):
+   ```bash
+   kubectl logs <file_watcher_pod>
+   ```
+
+2. Check the contents of the processed data in the `processed_data` directory:
+   ```bash
+   hdfs dfs -cat /processed_data/processed_test_data.csv
+   ```
+
+3. Check the correctness of ETL execution:
+- Make sure that:
+     - There are no transactions with `status = 'failed'.
+     - All amounts are converted to USD.
+
+---
+
+### 3. Checking formal constraints
+1. **Containerization**:
+   - Check that the project is deployed using Docker/Kubernetes:
+     ```bash
+     kubectl get deployments
+     kubectl get pods
+     ```
+
+2. **Logs**:
+- Make sure that all logs are written in Elasticsearch:
+     ```bash
+     curl -X GET "http://<elasticsearch_url>/etl_logs/_search"
+     ```
+
+3. **Sharding and Replication**:
+- Check for at least three replicas for components:
+``bash
+     kubectl get pods -o wide
+     ```
+
+---
+
+### 4. Fault tolerance check
+1. Stop one of the pods:
+   ```bash
+   kubectl delete pod <etl_pipeline_pod>
+   ```
+2. Make sure that the system continues processing data after restoring the pods.
+
+---
+
+###5. Load Testing
+#### Load generation
+1. Upload multiple files to `input_data`:
+   ```bash
+   for i in {1..100}; do
+       hdfs dfs -put test_data_$i.csv /input_data/
+   done
+   ```
+
+#### Load monitoring
+1. Check the data processing delay in Grafana.
+2. Compare the actual processing time with the allowed time (for example, no more than 1 minute per file).

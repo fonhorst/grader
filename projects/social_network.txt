@@ -1,0 +1,23 @@
+You have to design and implement the data collecting and monitoring system. In this case “monitoring” means keeping the data in actual state. For example, user profiles. User name, surname, city, etc may be changed during the time, so you have to update this information in your data storage system.
+Moreover, to store the data you also have to design an effective data storage system. You should use ClickHouse, other tools at your discretion.
+This data storage system, in addition requirements are described below, has to support the ability to serve Data Marts (DM) lifecycle. DM is a particular database containing DWH’s data slice. Sometimes DMs may own their data streams separately from DWH data streams.
+Consequently, the unique data from DM needs to be moved into DWH at the end of DM’s lifecycle.
+
+Features:
+*Data is received from the stream and needs to be written into storage by stream.
+*Records in stream may be duplicated. Records duplication in the storage is undesirable.
+*Records losing is undesirable.
+*Your storage has to be able to provide actual state and historical data. 
+
+Requirements:
+*Fault-tolerance (including for incorrect data extraction).
+*Scalability.
+*Sharding (at least 3 servers).
+*Replication.
+*The system has to contain applied dashboards.
+*The system has to contain your services and apps monitoring (cpu/ram/io/network usage, collected data, etc).
+*Use Kafka for queueus
+*Use arango db for relational queries, use elasticsearch for fulltext search
+*All databases should be deployed in Kubernetes
+*Bare-metal deployment is forbidden (use containers).
+

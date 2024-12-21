@@ -1,0 +1,157 @@
+
+# Methodology for Checking Student Project
+
+## Prerequisites
+Before starting the verification, ensure the following:
+- Access to a Kubernetes cluster where the solution is deployed.
+- Kubernetes CLI tools installed (kubectl, helm, etc.).
+- Authentication credentials to access the cluster and relevant services (Elasticsearch, ClickHouse, ArangoDB, Kafka).
+- Predefined test data and data generation tools.
+- Monitoring and alerting tools (Prometheus, Grafana) for workload and performance tests.
+
+## The Predefined Reserved Names of Required Objects
+The following table lists the reserved names for cluster objects, tables, and columns.
+
+| Name           | Object Type    | Description                                                             |
+|----------------|----------------|-------------------------------------------------------------------------|
+| `log_events`   | ClickHouse Table | Stores event logs for microservice actions.                             |
+| `metrics_data` | ClickHouse Table | Contains metrics for performance, CPU/RAM, and simultaneous users.      |
+| `transactions` | ArangoDB Collection | Contains transaction data across all services.                           |
+| `archive_data` | S3 Bucket       | Stores older data moved from hot storage.                               |
+| `event_stream` | Kafka Topic     | Stores real-time event logs pushed from microservices.                  |
+| `alerts`       | Elasticsearch Index | Stores generated alerts for anomaly detection.                          |
+| `dashboards`   | Grafana Dashboards | Monitors system metrics, business metrics, and anomalies.                |
+
+## 1. Checking for Presence of Required Objects
+1. **Kubernetes Cluster Verification:**
+   - Ensure that the required pods, services, and StatefulSets/Deployments are running.
+     ```bash
+     kubectl get pods
+     kubectl get services
+     kubectl get statefulsets
+     ```
+   - Check if services like Kafka, ArangoDB, ClickHouse, Elasticsearch, and Prometheus are operational.
+     ```bash
+     kubectl get pods -l app=kafka
+     kubectl get pods -l app=clickhouse
+     kubectl get pods -l app=elasticsearch
+     ```
+
+2. **Databases and Tables Verification:**
+   - Ensure the `log_events` and `metrics_data` tables exist in ClickHouse.
+     ```sql
+     SHOW TABLES FROM default;
+     DESCRIBE TABLE log_events;
+     DESCRIBE TABLE metrics_data;
+     ```
+
+   - Ensure the `transactions` collection exists in ArangoDB.
+     ```javascript
+     db._collections();
+     db.transactions.exists();
+     ```
+
+3. **Kafka Topic Verification:**
+   - Verify if the Kafka topic `event_stream` is present and receiving messages.
+     ```bash
+     kafka-topics.sh --list --zookeeper <zookeeper-host>
+     kafka-console-consumer.sh --topic event_stream --bootstrap-server <broker-host>
+     ```
+
+## 2. Checking Functional Capabilities
+1. **Logs Aggregation:**
+   - Test if logs are correctly aggregated by querying `log_events` in ClickHouse:
+     ```sql
+     SELECT * FROM log_events WHERE action_id = '<some_action_id>';
+     ```
+   - Ensure the logs are being written in near real-time.
+
+2. **Metrics Querying:**
+   - Validate the metrics such as CPU/RAM consumption and the number of simultaneous users:
+     ```sql
+     SELECT cpu_usage, ram_usage, concurrent_users 
+     FROM metrics_data 
+     WHERE timestamp BETWEEN '<start>' AND '<end>';
+     ```
+
+3. **Business Metrics:**
+   - Check if the system can retrieve transaction counts and page views per interval:
+     ```sql
+     SELECT COUNT(*) AS transactions_count, SUM(page_views) 
+     FROM transactions 
+     WHERE timestamp BETWEEN '<start>' AND '<end>';
+     ```
+
+4. **Anomaly Detection:**
+   - Test anomaly detection logic by verifying alerts in Elasticsearch:
+     ```json
+     GET /alerts/_search
+     {
+       "query": {
+         "match": {
+           "anomaly_type": "multitude_of_same_operations"
+         }
+       }
+     }
+     ```
+
+5. **Archiving:**
+   - Check if older data is being moved to S3 after a month:
+     ```bash
+     aws s3 ls s3://<bucket-name>/archive_data/
+     ```
+
+## 3. Checking for Formal Restrictions
+1. **Sharding and Replication:**
+   - Ensure that the databases and Kafka have sharding and replication enabled across at least 3 nodes.
+     ```bash
+     kubectl exec -it <clickhouse-pod> -- clickhouse-client --query "SHOW CLUSTER;"
+     kafka-topics.sh --describe --topic event_stream --zookeeper <zookeeper-host>
+     ```
+
+2. **Kubernetes Deployment:**
+   - Verify the deployment restrictions (no bare-metal):
+     ```bash
+     kubectl get nodes
+     ```
+
+## 4. Checking Fault-Tolerance
+1. **Microservice Resilience:**
+   - Perform a controlled failure of a microservice and observe how the system behaves. Test if retries are successful after recovery.
+     ```bash
+     kubectl delete pod <microservice-pod>
+     ```
+
+2. **Handling External Service Failures:**
+   - Test if the system gracefully handles external service downtimes (e.g., payment provider):
+     - Simulate an external service failure and verify retries:
+     ```bash
+     kafka-console-producer.sh --topic event_stream --bootstrap-server <broker-host> 
+     ```
+
+## 5. Workload Testing
+### Test Description
+1. **Workload Generation:**
+   - Use workload generators to produce logs, transactions, and user operations at different intervals (15 min, 1 hour).
+   - Example requests:
+     ```bash
+     flog -t apache_combined -n 100000 --start-time '1/Apr/2024:10:00:00'
+     ```
+
+2. **Frequency and Volume:**
+   - Logs: 10,000 logs per minute.
+   - Transactions: 5,000 transaction requests per minute.
+   - Queries should be run simultaneously to ensure the system can handle concurrent read/write.
+
+3. **Measurements:**
+   - Measure:
+     - CPU and RAM usage per interval.
+     - Response time (min, max, average).
+     - Error rate.
+     - Data processing latency.
+
+4. **Monitoring:**
+   - Use Grafana to check:
+     - System load.
+     - Alert triggers (anomalies, retries).
+     - Dashboard updates every minute.

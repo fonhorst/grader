@@ -1,0 +1,120 @@
+### Methodology for verifying the student project "Implementing an Apache Spark application for distributed machine learning model learning"
+
+#### Preliminary requirements
+Before starting the check, make sure that:
+- Kubernetes cluster with available resources for application deployment.
+- Installed Kubernetes management tools (kubectl, helm, etc.).
+- Apache Spark configuration that supports dynamic resource allocation.
+- Monitoring and logging tools (for example, Prometheus, Grafana, ELK stack).
+- Predefined test data for model preparation and training.
+- Tools for testing distributed learning (for example, OpenMPI).
+
+---
+
+### Reserved object names
+
+| Name | Type of object | Description |
+|---------------------|----------------------|----------------------------------------------------------------|
+| `data_preprocessing`| Spark Job | Data processing and preparation for training.                   |
+| `model_training`    | Spark Job | Distributed model training using OpenMPI.       |
+| `hyperparam_search` | Spark Job | Selecting hyperparameters of the model in parallel.                     |
+| `spark_cluster`     | Kubernetes StatefulSet | An Apache Spark cluster for completing tasks.                   |
+| `monitoring_dashboard`| Grafana Dashboard | Dashboard for monitoring cluster metrics and Spark Jobs execution.    |
+
+---
+
+### Verification stages
+
+#### 1. Checking the infrastructure
+
+1. **Checking the Kubernetes cluster:**
+- Make sure that the Kubernetes cluster is working correctly and is configured to run Spark Jobs:
+     ```bash
+     kubectl get pods
+     kubectl get services
+     kubectl get statefulsets
+     ``
+- Check the availability of the Spark cluster:
+     ```bash
+     kubectl get pods -l app=spark
+     kubectl logs <spark-master-pod>
+     ```
+
+2. **Checking the Spark configuration:**
+- Make sure that dynamic resource allocation is enabled in the configuration:
+``bash
+     kubectl exec -it <spark-master-pod> -- cat /opt/spark/conf/spark-defaults.conf
+     ``
+- Check the settings for parallel execution of tasks.
+
+---
+
+#### 2. Checking the functionality of the application
+
+1. **Data Processing:**
+- Run the Job to prepare the data:
+     ```bash
+     spark-submit --master k8s://<kubernetes-master-url> \
+       --class com.example.DataPreprocessing \
+       local:///opt/spark/jars/app.jar
+``
+- Make sure that the data is processed correctly and stored in the storage (for example, HDFS, S3).
+
+2. **Model Training:**
+- Run distributed model training:
+     ```bash
+     spark-submit --master k8s://<kubernetes-master-url> \
+       --class com.example.ModelTraining \
+       local:///opt/spark/jars/app.jar
+``
+- Check the correctness and minimization of shuffle operations.
+
+3. **Selection of hyperparameters:**
+   - Run the Job to select hyperparameters:
+``bash
+     spark-submit --master k8s://<kubernetes-master-url> \
+       --class com.example.HyperparamSearch \
+       local:///opt/spark/jars/app.jar
+``
+- Make sure that the hyperparameter selection results are saved to the specified location.
+
+---
+
+#### 3. Checking metrics and monitoring
+
+1. **Job Execution Monitoring:**
+- Check Grafana dashboards for Spark Jobs execution metrics analysis:
+     - CPU and RAM usage.
+     - The number of shuffle operations.
+     - Load sharing between executors.
+
+2. **Log analysis:**
+   - Use the ELK stack or built-in Spark tools to analyze logs:
+``bash
+     kubectl logs <spark-executor-pod>
+     ```
+
+---
+
+####4. Performance Testing
+
+1. **Load Generation:**
+- Use a script to create a large amount of data and run multiple Jobs in parallel.
+
+2. **Metric Measurement:**
+- Jobs Execution Time.
+   - The number of tasks completed in parallel.
+   - Error rate.
+
+---
+
+#### 5. Fault tolerance check
+
+1. **Failure Simulation:**
+- Stop one of the Spark Executors and check that the Job has completed successfully:
+``bash
+     kubectl delete pod <spark-executor-pod>
+     ```
+
+2. **Recovery Check:**
+- Make sure that the system correctly redistributes tasks among the remaining executors.
