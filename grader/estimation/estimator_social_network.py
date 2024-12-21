@@ -5,8 +5,9 @@ from elasticsearch import Elasticsearch
 from arango import ArangoClient
 from clickhouse_driver import Client as ClickHouseClient
 from kafka import KafkaAdminClient, KafkaConsumer
-from .estimator import BaseEstimator
+from .base_estimator import BaseEstimator
 from .estimator_log_metrics import LogMetricsEstimator
+import time
 
 class SocialNetworkEstimator(BaseEstimator):
     """Estimator for checking social network components and functionality."""
@@ -34,7 +35,7 @@ class SocialNetworkEstimator(BaseEstimator):
             self.logger.error(f"Failed to initialize clients: {str(e)}")
             raise
 
-    def check_required_objects(self) -> Dict[str, bool]:
+    def _check_required_objects(self) -> Dict[str, bool]:
         """Check if all required objects exist in the system."""
         results = {}
         
@@ -69,7 +70,7 @@ class SocialNetworkEstimator(BaseEstimator):
             
         return results
 
-    def check_data_ingestion(self) -> Dict[str, bool]:
+    def _check_data_ingestion(self) -> Dict[str, bool]:
         """Verify data ingestion functionality."""
         results = {}
         
@@ -101,7 +102,7 @@ class SocialNetworkEstimator(BaseEstimator):
             
         return results
 
-    def check_fault_tolerance(self) -> Dict[str, bool]:
+    def _check_fault_tolerance(self) -> Dict[str, bool]:
         """Test system fault tolerance."""
         results = {}
         
@@ -127,7 +128,7 @@ class SocialNetworkEstimator(BaseEstimator):
             
         return results
 
-    def check_performance(self) -> Dict[str, float]:
+    def _check_performance(self) -> Dict[str, float]:
         """Test system performance under load."""
         results = {}
         
@@ -158,8 +159,8 @@ class SocialNetworkEstimator(BaseEstimator):
     def estimate(self) -> Dict[str, any]:
         """Run all checks and return comprehensive results."""
         return {
-            'required_objects': self.check_required_objects(),
-            'data_ingestion': self.check_data_ingestion(),
-            'fault_tolerance': self.check_fault_tolerance(),
-            'performance': self.check_performance()
+            'required_objects': self._check_required_objects(),
+            'data_ingestion': self._check_data_ingestion(),
+            'fault_tolerance': self._check_fault_tolerance(),
+            'performance': self._check_performance()
         }

@@ -31,7 +31,7 @@ class TimeSeriesEstimator(BaseEstimator):
             self.logger.error(f"Failed to initialize clients: {str(e)}")
             raise
 
-    def check_required_objects(self) -> Dict[str, bool]:
+    def _check_required_objects(self) -> Dict[str, bool]:
         """Check if all required objects exist in the system."""
         results = {}
         
@@ -73,7 +73,7 @@ class TimeSeriesEstimator(BaseEstimator):
             
         return results
 
-    def check_data_ingestion(self) -> Dict[str, bool]:
+    def _check_data_ingestion(self) -> Dict[str, bool]:
         """Verify data ingestion functionality."""
         results = {}
         
@@ -105,7 +105,7 @@ class TimeSeriesEstimator(BaseEstimator):
             
         return results
 
-    def check_data_retention(self) -> Dict[str, bool]:
+    def _check_data_retention(self) -> Dict[str, bool]:
         """Check if data retention policies are being followed."""
         results = {}
         
@@ -134,7 +134,7 @@ class TimeSeriesEstimator(BaseEstimator):
             
         return results
 
-    def run_workload_test(self) -> Dict[str, float]:
+    def _run_workload_test(self) -> Dict[str, float]:
         """Run performance tests under specified workload."""
         results = {}
         
@@ -181,8 +181,8 @@ class TimeSeriesEstimator(BaseEstimator):
     def estimate(self) -> Dict[str, any]:
         """Run all checks and return comprehensive results."""
         return {
-            'required_objects': self.check_required_objects(),
-            'data_ingestion': self.check_data_ingestion(),
-            'data_retention': self.check_data_retention(),
-            'workload_test': self.run_workload_test()
+            'required_objects': self._check_required_objects(),
+            'data_ingestion': self._check_data_ingestion(),
+            'data_retention': self._check_data_retention(),
+            'workload_test': self._run_workload_test()
         }

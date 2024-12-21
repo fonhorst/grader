@@ -28,7 +28,7 @@ class LogMetricsEstimator(BaseEstimator):
             self.logger.error(f"Failed to initialize Kubernetes client: {e}")
             raise
 
-    def check_required_pods(self) -> Dict[str, bool]:
+    def _check_required_pods(self) -> Dict[str, bool]:
         """Check if all required pods are running."""
         required_services = ['kafka', 'clickhouse', 'elasticsearch', 'arangodb']
         status = {}
@@ -48,7 +48,7 @@ class LogMetricsEstimator(BaseEstimator):
             
         return status
 
-    def verify_clickhouse_tables(self, host: str, port: int) -> Dict[str, bool]:
+    def _verify_clickhouse_tables(self, host: str, port: int) -> Dict[str, bool]:
         """Verify required ClickHouse tables exist and are accessible."""
         required_tables = ['log_events', 'metrics_data']
         status = {}
@@ -67,7 +67,7 @@ class LogMetricsEstimator(BaseEstimator):
             
         return status
 
-    def verify_arango_collections(self, host: str, port: int, 
+    def _verify_arango_collections(self, host: str, port: int, 
                                 username: str, password: str) -> Dict[str, bool]:
         """Verify required ArangoDB collections exist."""
         required_collections = ['transactions']
@@ -90,7 +90,7 @@ class LogMetricsEstimator(BaseEstimator):
             
         return status
 
-    def verify_kafka_topics(self, bootstrap_servers: str) -> Dict[str, bool]:
+    def _verify_kafka_topics(self, bootstrap_servers: str) -> Dict[str, bool]:
         """Verify required Kafka topics exist and are receiving messages."""
         required_topics = ['event_stream']
         status = {}
@@ -111,7 +111,7 @@ class LogMetricsEstimator(BaseEstimator):
             
         return status
 
-    def check_system_metrics(self) -> Dict[str, float]:
+    def _check_system_metrics(self) -> Dict[str, float]:
         """Get current system metrics."""
         metrics = {
             'cpu_usage': psutil.cpu_percent(),
@@ -121,12 +121,12 @@ class LogMetricsEstimator(BaseEstimator):
         return metrics
 
     def check_required_objects(self) -> Dict[str, bool]:
-        return self.check_required_pods()
+        return self._check_required_pods()
 
     def check_data_ingestion(self) -> Dict[str, bool]:
         results = {}
-        results.update(self.verify_clickhouse_tables('localhost', 9000))
-        results.update(self.verify_kafka_topics('localhost:9092'))
+        results.update(self._verify_clickhouse_tables('localhost', 9000))
+        results.update(self._verify_kafka_topics('localhost:9092'))
         return results
 
     def check_fault_tolerance(self) -> Dict[str, bool]:
@@ -134,7 +134,7 @@ class LogMetricsEstimator(BaseEstimator):
         return {'system_resilient': True}  # Placeholder
 
     def check_performance(self) -> Dict[str, float]:
-        return self.check_system_metrics()
+        return self._check_system_metrics()
 
     def estimate(self) -> Dict[str, Any]:
         return super().estimate()

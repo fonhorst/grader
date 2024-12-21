@@ -3,12 +3,14 @@ from typing import Dict, List, Optional
 import subprocess
 import json
 import re
+from .base_estimator import BaseEstimator
 
-class SparkDataComputeParallelismEstimator:
+class SparkDataComputeParallelismEstimator(BaseEstimator):
     def __init__(self):
+        super().__init__()
         self.logger = logging.getLogger(__name__)
         
-    def check_kubernetes_infrastructure(self) -> Dict[str, bool]:
+    def _check_kubernetes_infrastructure(self) -> Dict[str, bool]:
         """Verify Kubernetes cluster and Spark configuration"""
         results = {
             "pods_running": False,
@@ -39,7 +41,7 @@ class SparkDataComputeParallelismEstimator:
             
         return results
 
-    def verify_spark_jobs(self) -> Dict[str, bool]:
+    def _verify_spark_jobs(self) -> Dict[str, bool]:
         """Verify the three main Spark jobs"""
         results = {
             "data_preprocessing": False,
@@ -72,7 +74,7 @@ class SparkDataComputeParallelismEstimator:
                 
         return results
 
-    def check_monitoring(self) -> Dict[str, bool]:
+    def _check_monitoring(self) -> Dict[str, bool]:
         """Verify monitoring and metrics collection"""
         results = {
             "grafana_dashboard": False,
@@ -104,7 +106,7 @@ class SparkDataComputeParallelismEstimator:
             
         return results
 
-    def run_performance_tests(self) -> Dict[str, float]:
+    def _run_performance_tests(self) -> Dict[str, float]:
         """Run performance and fault tolerance tests"""
         results = {
             "avg_job_duration": 0.0,
@@ -142,7 +144,7 @@ class SparkDataComputeParallelismEstimator:
             
         return results
 
-    def check_fault_tolerance(self) -> bool:
+    def _check_fault_tolerance(self) -> bool:
         """Test fault tolerance by killing an executor"""
         try:
             # Start a job
@@ -167,7 +169,15 @@ class SparkDataComputeParallelismEstimator:
             return False
 
     def estimate(self) -> Dict[str, float]:
-        """Run all checks and return final estimation"""
+        """
+        Run all checks and return final estimation.
+        
+        Returns:
+            Dict[str, float]: Dictionary containing:
+                - score: float value representing the total score
+                - max_score: float value representing maximum possible score (100.0)
+                - details: dictionary of component scores
+        """
         scores = {
             "infrastructure": 0.0,
             "functionality": 0.0,
@@ -177,19 +187,19 @@ class SparkDataComputeParallelismEstimator:
         }
         
         # Check infrastructure (20%)
-        infra_results = self.check_kubernetes_infrastructure()
+        infra_results = self._check_kubernetes_infrastructure()
         scores["infrastructure"] = sum(infra_results.values()) / len(infra_results) * 20
         
         # Check functionality (30%)
-        func_results = self.verify_spark_jobs()
+        func_results = self._verify_spark_jobs()
         scores["functionality"] = sum(func_results.values()) / len(func_results) * 30
         
         # Check monitoring (15%)
-        monitoring_results = self.check_monitoring()
+        monitoring_results = self._check_monitoring()
         scores["monitoring"] = sum(monitoring_results.values()) / len(monitoring_results) * 15
         
         # Check performance (20%)
-        perf_results = self.run_performance_tests()
+        perf_results = self._run_performance_tests()
         # Normalize performance metrics
         normalized_duration = min(1.0, 60.0 / max(perf_results["avg_job_duration"], 1))
         normalized_parallel = min(1.0, perf_results["parallel_tasks"] / 10)
@@ -197,7 +207,7 @@ class SparkDataComputeParallelismEstimator:
         scores["performance"] = ((normalized_duration + normalized_parallel + normalized_errors) / 3) * 20
         
         # Check fault tolerance (15%)
-        fault_tolerance_result = self.check_fault_tolerance()
+        fault_tolerance_result = self._check_fault_tolerance()
         scores["fault_tolerance"] = 15.0 if fault_tolerance_result else 0.0
         
         # Calculate total score

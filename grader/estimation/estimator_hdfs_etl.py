@@ -20,28 +20,28 @@ class HDFSETLEstimator(BaseEstimator):
         self.k8s_client = client.CoreV1Api()
 
     def check_required_objects(self) -> Dict[str, bool]:
-        status, issues = self.verify_kubernetes_objects()
+        status, issues = self._verify_kubernetes_objects()
         return {'kubernetes_objects': status}
 
     def check_data_ingestion(self) -> Dict[str, bool]:
-        status, issues = self.verify_etl_functionality('test_data.csv')
+        status, issues = self._verify_etl_functionality('test_data.csv')
         return {'etl_functionality': status}
 
     def check_fault_tolerance(self) -> Dict[str, bool]:
-        status, issues = self.verify_fault_tolerance()
+        status, issues = self._verify_fault_tolerance()
         return {'fault_tolerance': status}
 
     def check_performance(self) -> Dict[str, float]:
-        status, metrics = self.perform_load_test()
+        status, metrics = self._perform_load_test()
         return metrics
 
     def estimate(self) -> Dict[str, Any]:
         results = super().estimate()
         # Add HDFS-specific checks
-        results['hdfs_structure'] = self.verify_hdfs_structure()[0]
+        results['hdfs_structure'] = self._verify_hdfs_structure()[0]
         return results
 
-    def verify_kubernetes_objects(self) -> Tuple[bool, List[str]]:
+    def _verify_kubernetes_objects(self) -> Tuple[bool, List[str]]:
         """Verify required Kubernetes objects exist and are running."""
         issues = []
         
@@ -62,7 +62,7 @@ class HDFSETLEstimator(BaseEstimator):
 
         return len(issues) == 0, issues
 
-    def verify_hdfs_structure(self) -> Tuple[bool, List[str]]:
+    def _verify_hdfs_structure(self) -> Tuple[bool, List[str]]:
         """Verify HDFS directories and permissions."""
         issues = []
         
@@ -75,7 +75,7 @@ class HDFSETLEstimator(BaseEstimator):
 
         return len(issues) == 0, issues
 
-    def verify_etl_functionality(self, test_file: str) -> Tuple[bool, List[str]]:
+    def _verify_etl_functionality(self, test_file: str) -> Tuple[bool, List[str]]:
         """Verify ETL pipeline functionality."""
         issues = []
         
@@ -105,7 +105,7 @@ class HDFSETLEstimator(BaseEstimator):
 
         return len(issues) == 0, issues
 
-    def verify_fault_tolerance(self) -> Tuple[bool, List[str]]:
+    def _verify_fault_tolerance(self) -> Tuple[bool, List[str]]:
         """Verify system fault tolerance."""
         issues = []
         
@@ -131,7 +131,7 @@ class HDFSETLEstimator(BaseEstimator):
 
         return len(issues) == 0, issues
 
-    def perform_load_test(self, num_files: int = 100) -> Tuple[bool, Dict]:
+    def _perform_load_test(self, num_files: int = 100) -> Tuple[bool, Dict]:
         """Perform load testing and collect metrics."""
         results = {
             'files_processed': 0,
