@@ -1,0 +1,31 @@
+{{- if .Values.clickhouse.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+    app: clickhouse
+data:
+  custom-settings.xml: |-
+    <clickhouse>
+      <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
+      <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>
+      <user_files_path>{{ .Values.clickhouse.persistence.mountPath }}/user_files</user_files_path>
+      <format_schema_path>{{ .Values.clickhouse.persistence.mountPath }}/format_schemas</format_schema_path>
+      
+      {{- if .Values.clickhouse.config.settings.default_replica_path }}
+      <default_replica_path>{{ .Values.clickhouse.config.settings.default_replica_path }}</default_replica_path>
+      {{- end }}
+      
+      {{- if .Values.zookeeper.enabled }}
+      <zookeeper>
+        <node>
+          <host>zookeeper</host>
+          <port>{{ .Values.zookeeper.service.clientPort }}</port>
+        </node>
+      </zookeeper>
+      {{- end }}
+    </clickhouse>
+{{- end }} 

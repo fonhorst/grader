@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .Values.user }}
+  name: jupyter-spark
+  labels:
+    env: dpo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jupyter-spark
+  template:
+    metadata:
+      labels:
+        app: jupyter-spark
+        env: dpo
+    spec:
+      volumes:
+        - name: shared-storage
+          persistentVolumeClaim:
+            claimName: pvc-shared-{{- .Values.user }}
+            readOnly: true
+        - name: nfs-home-storage
+          persistentVolumeClaim:
+            claimName: pvc-{{- .Values.user }}
+            readOnly: false
+      serviceAccountName: spark
+      containers:
+      - name: jupyter
+        image: node2.bdcl:5000/ray-vllm:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8888
+#        command: [ "start-notebook.sh" ]
+#        args: [ "--NotebookApp.token=''" ]  # Here you can specify your password for Jupyter Server
+        resources:
+          requests:
+            memory: {{ .Values.jupyter_mem_limits }}
+            cpu: {{ .Values.jupyter_cpu_limits }}
+            nvidia.com/gpu: 1
+          limits:
+            memory: {{ .Values.jupyter_mem_limits }}
+            cpu: {{ .Values.jupyter_cpu_limits }}
+            nvidia.com/gpu: 1
+        volumeMounts:
+          - mountPath: "/shared-data"
+            name: shared-storage
+            readOnly: true
+          - mountPath: "/notebooks"
+            name: nfs-home-storage
+            readOnly: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jupyter-spark-svc
+  namespace: {{ .Values.user }}
+  labels:
+    env: dpo
+spec:
+  type: NodePort
+  ports:
+    - port: 8888
+      protocol: TCP
+      name: jupyter
+    - port: 4040
+      protocol: TCP
+      name: spark
+  selector:
+    app: jupyter-spark

@@ -1,0 +1,18 @@
+{{- range .Values.storage.persistentVolumeClaims }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace.name }}
+  labels:
+    {{- include "clickhouse.labels" $ | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .size }}
+  storageClassName: {{ $.Values.storage.className }}
+  volumeName: {{ .volumeName }}
+{{- end }} 

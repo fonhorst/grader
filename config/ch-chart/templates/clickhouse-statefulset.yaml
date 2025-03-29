@@ -1,0 +1,62 @@
+{{- if .Values.clickhouse.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+    app: clickhouse
+spec:
+  serviceName: clickhouse
+  replicas: {{ .Values.clickhouse.replicas }}
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        {{- include "clickhouse.labels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: clickhouse
+        image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+        imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.clickhouse.service.httpPort }}
+        - name: tcp
+          containerPort: {{ .Values.clickhouse.service.tcpPort }}
+        resources:
+          {{- toYaml .Values.clickhouse.resources | nindent 10 }}
+        env:
+        - name: CLICKHOUSE_CONFIG
+          value: /etc/clickhouse-server/config.xml
+        {{- if .Values.zookeeper.enabled }}
+        - name: CLICKHOUSE_ZOOKEEPER_HOSTS
+          value: "zookeeper:{{ .Values.zookeeper.service.clientPort }}"
+        {{- end }}
+        volumeMounts:
+        {{- if .Values.clickhouse.persistence.enabled }}
+        - name: data
+          mountPath: {{ .Values.clickhouse.persistence.mountPath }}
+        {{- end }}
+        - name: config
+          mountPath: /etc/clickhouse-server/config.d/
+      volumes:
+      - name: config
+        configMap:
+          name: clickhouse-config
+  {{- if .Values.clickhouse.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ $.Values.storage.className }}
+      resources:
+        requests:
+          storage: {{ (index .Values.storage.persistentVolumeClaims 0).size }}
+  {{- end }}
+{{- end }} 

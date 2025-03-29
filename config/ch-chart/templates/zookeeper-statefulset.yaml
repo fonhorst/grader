@@ -1,0 +1,58 @@
+{{- if .Values.zookeeper.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+    app: zookeeper
+spec:
+  serviceName: zookeeper
+  replicas: {{ .Values.zookeeper.replicas }}
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+        {{- include "clickhouse.labels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: zookeeper
+        image: "{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
+        imagePullPolicy: {{ .Values.zookeeper.image.pullPolicy }}
+        ports:
+        - name: client
+          containerPort: {{ .Values.zookeeper.service.clientPort }}
+        - name: server
+          containerPort: {{ .Values.zookeeper.service.serverPort }}
+        - name: leader-election
+          containerPort: {{ .Values.zookeeper.service.leaderElectionPort }}
+        resources:
+          {{- toYaml .Values.zookeeper.resources | nindent 10 }}
+        env:
+        - name: ZOO_MY_ID
+          value: "1"
+        - name: ZOO_SERVERS
+          value: "server.1=0.0.0.0:{{ .Values.zookeeper.service.serverPort }}:{{ .Values.zookeeper.service.leaderElectionPort }}"
+        - name: ZOO_DATA_DIR
+          value: "{{ .Values.zookeeper.persistence.mountPath }}"
+        volumeMounts:
+        {{- if .Values.zookeeper.persistence.enabled }}
+        - name: data
+          mountPath: {{ .Values.zookeeper.persistence.mountPath }}
+        {{- end }}
+  {{- if .Values.zookeeper.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ $.Values.storage.className }}
+      resources:
+        requests:
+          storage: {{ (index .Values.storage.persistentVolumeClaims 1).size }}
+  {{- end }}
+{{- end }} 
