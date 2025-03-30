@@ -31,18 +31,29 @@ spec:
           {{- toYaml .Values.clickhouse.resources | nindent 10 }}
         env:
         - name: CLICKHOUSE_CONFIG
-          value: /etc/clickhouse-server/config.xml}
+          value: /etc/clickhouse-server/config.xml
+        - name: CLICKHOUSE_USER
+          value: admin
+        - name: CLICKHOUSE_PASSWORD
+          value: admin
         volumeMounts:
         {{- if .Values.clickhouse.persistence.enabled }}
         - name: data
           mountPath: {{ .Values.clickhouse.persistence.mountPath }}
         {{- end }}
         - name: config
-          mountPath: /etc/clickhouse-server/
+          mountPath: /etc/clickhouse-server
       volumes:
       - name: config
         configMap:
           name: clickhouse-config
+          items:
+          - key: config.xml
+            path: config.xml
+          - key: users.xml
+            path: users.xml
+          - key: config_d_docker_related_config.xml
+            path: config.d/docker_related_config.xml
   {{- if .Values.clickhouse.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
