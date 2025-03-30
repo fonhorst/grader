@@ -20,7 +20,7 @@ Access Information:
 Connection within cluster:
 -------------------------
 You can connect to individual nodes using:
-  clickhouse-{{ $i }}.clickhouse-headless.{{ .Release.namespace }}.svc.cluster.local
+  clickhouse-<server num>.clickhouse-headless.{{ .Release.namespace }}.svc.<cluster name>
 
 Connection from outside:
 ----------------------
