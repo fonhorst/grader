@@ -31,6 +31,6 @@ data:
       <property><name>dfs.client.use.datanode.hostname</name><value>true</value></property>
       <property><name>dfs.datanode.use.datanode.hostname</name><value>true</value></property>
       <property><name>dfs.datanode.data.dir</name><value>file:///hadoop/dfs/data</value></property>
-      <property><name>dfs.replication</name><value>3</value></property>
+      <property><name>dfs.replication</name><value>{{ .Values.defaultReplicationFactor }}</value></property>
     </configuration> 
 

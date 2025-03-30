@@ -4,9 +4,7 @@ fullnameOverride: ""
 
 clusterName: hdfs-k8s
 
-namespace:
-  name: hdfs
-  create: true
+defaultReplicationFactor: 3
 
 nameNode:
   replicaCount: 1

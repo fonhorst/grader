@@ -1,6 +1,6 @@
 Thank you for installing {{ .Chart.Name }}.
 
-Your HDFS cluster has been deployed to namespace: {{ .Values.namespace.name }}
+Your HDFS cluster has been deployed to namespace: {{ .Release.namespace }}
 
 NameNode WebUI is available at:
   http://namenode:{{ .Values.nameNode.service.webPort }}

@@ -4,9 +4,7 @@ fullnameOverride: ""
 
 clusterName: grader-hdfs
 
-# namespace:
-#   name: grader-hdfs
-#   create: true
+defaultReplicationFactor: 1
 
 nameNode:
   replicaCount: 1
