@@ -28,6 +28,8 @@ spec:
           value: /opt/hadoop
         - name: HADOOP_CONF_DIR
           value: /etc/hadoop
+        - name: CLUSTER_NAME
+          value: {{ .Values.clusterName }}
         volumeMounts:
         - name: hdfs-data
           mountPath: /hadoop/dfs/data

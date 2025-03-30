@@ -2,6 +2,8 @@
 nameOverride: ""
 fullnameOverride: ""
 
+clusterName: grader-hdfs
+
 # namespace:
 #   name: grader-hdfs
 #   create: true

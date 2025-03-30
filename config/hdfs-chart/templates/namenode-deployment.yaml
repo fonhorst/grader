@@ -27,6 +27,12 @@ spec:
           value: /opt/hadoop
         - name: HADOOP_CONF_DIR
           value: /etc/hadoop
+        - name: CLUSTER_NAME
+          value: {{ .Values.clusterName }}
+        - name: HADOOP_HEAPSIZE_MAX
+          value: {{ .Values.nameNode.resources.limits.memory | replace "Gi" "000" | replace "Mi" "" | int | sub 500 | toString }}Mi
+        - name: HADOOP_HEAPSIZE_MIN
+          value: {{ .Values.nameNode.resources.requests.memory | replace "Gi" "000" | replace "Mi" "" | int | sub 500 | toString }}Mi
         volumeMounts:
         - name: hdfs-name
           mountPath: /hadoop/dfs/name

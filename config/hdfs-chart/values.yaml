@@ -2,6 +2,8 @@
 nameOverride: ""
 fullnameOverride: ""
 
+clusterName: hdfs-k8s
+
 namespace:
   name: hdfs
   create: true
