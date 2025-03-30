@@ -12,29 +12,23 @@ data:
     
     set -e
     echo "Pre-initializing ClickHouse configuration"
-    cat /etc/clickhouse-server/custom-config.xml.template | python3 /preprocessor.py > /etc/clickhouse-server/config.d/custom-config.xml
+    
+    # Extract server_id from hostname
+    if [ -z "$HOSTNAME" ]; then
+      echo "ERROR: HOSTNAME env var is not set"
+      exit 1
+    fi
+    
+    # Extract the server ID from the hostname (the number after the last dash)
+    SERVER_ID=$(echo "$HOSTNAME" | grep -o '[0-9]*$')
+    
+    # Process the template file and replace {server_id} with the actual server ID
+    sed "s/{server_id}/$SERVER_ID/g" /etc/clickhouse-server/custom-config.xml.template > /etc/clickhouse-server/config.d/custom-config.xml
+    
     echo "Pre-initialization complete"
     set +e
     echo "Starting ClickHouse /entrypoint.sh"
     exec /entrypoint.sh
-
-  preprocessor.py: |-
-    import sys
-    import json
-    import os
-    import re
-
-    def main():
-        # Read the input from stdin
-        data = sys.stdin.read()
-        if 'HOSTNAME' not in os.environ:
-            raise Exception("HOSTNAME env var is not set")
-        server_id = int(os.environ['HOSTNAME'].split('-')[-1].strip())
-        out = data.format(server_id=server_id)
-        print(out)
-
-    if __name__ == "__main__":
-        main()
 
   custom-config.xml.template: |-
     <clickhouse>

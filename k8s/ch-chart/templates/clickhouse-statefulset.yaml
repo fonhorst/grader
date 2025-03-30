@@ -22,6 +22,7 @@ spec:
       - name: clickhouse
         image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
         imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+        entrypoint: ["/pre-init.sh"]
         ports:
         - name: http
           containerPort: {{ .Values.clickhouse.service.httpPort }}
@@ -44,10 +45,6 @@ spec:
         - name: pre-init
           mountPath: /pre-init.sh
           subPath: pre-init.sh
-          mode: 0755
-        - name: preprocessor
-          mountPath: /preprocessor.py
-          subPath: preprocessor.py
         - name: config
           mountPath: /etc/clickhouse-server/custom-config.xml.template
           subPath: custom-config.xml.template
@@ -55,13 +52,13 @@ spec:
       - name: config
         configMap:
           name: clickhouse-config
-          # items:
-          # - key: config.xml
-          #   path: config.xml
-          # - key: users.xml
-          #   path: users.xml
-          # - key: config_d_docker_related_config.xml
-          #   path: config.d/docker_related_config.xml
+      - name: pre-init
+        configMap:
+          name: clickhouse-config
+          items:
+            - key: pre-init.sh
+              path: pre-init.sh
+          defaultMode: 0755
   {{- if .Values.clickhouse.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
