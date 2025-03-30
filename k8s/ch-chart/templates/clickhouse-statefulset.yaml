@@ -41,8 +41,8 @@ spec:
         - name: data
           mountPath: {{ .Values.clickhouse.persistence.mountPath }}
         {{- end }}
-        - name: config
-          mountPath: /etc/clickhouse-server
+        # - name: config
+        #   mountPath: /etc/clickhouse-server
       volumes:
       - name: config
         configMap:

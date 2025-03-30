@@ -324,6 +324,7 @@ data:
           <flush_on_crash>false</flush_on_crash>
       </error_log>
 
+      <query_metric_log>
           <database>system</database>
           <table>query_metric_log</table>
           <flush_interval_milliseconds>7500</flush_interval_milliseconds>
