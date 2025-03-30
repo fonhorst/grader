@@ -1,33 +1,8 @@
-# Namespace configuration
-namespace:
-  create: true
-  name: clickhouse
-
 # Storage configuration
 storage:
   # Storage class name
   className: local-storage
-  # Persistent volumes configuration
-  persistentVolumes:
-    - name: pv-clickhouse-8
-      size: 50Gi
-      path: /data_1tb/general-clickhouse
-      node: node19.st
-      reclaimPolicy: Retain
-    - name: pv-zookeeper
-      size: 10Gi
-      path: /data_1tb/zookeeper
-      node: node19.st
-      reclaimPolicy: Retain
-
-  # Persistent volume claims configuration
-  persistentVolumeClaims:
-    - name: pvc-clickhouse-8
-      size: 50Gi
-      volumeName: pv-clickhouse-8
-    - name: pvc-zookeeper
-      size: 10Gi
-      volumeName: pv-zookeeper
+  size: 100Gi
 
 # Labels
 labels:
@@ -35,7 +10,6 @@ labels:
 
 # Clickhouse configuration
 clickhouse:
-  enabled: true
   replicas: 1
   image:
     repository: clickhouse/clickhouse-server
@@ -43,10 +17,10 @@ clickhouse:
     pullPolicy: IfNotPresent
   resources:
     requests:
-      memory: "4Gi"
+      memory: "16Gi"
       cpu: "2"
     limits:
-      memory: "8Gi"
+      memory: "16Gi"
       cpu: "4"
   service:
     type: ClusterIP
@@ -58,27 +32,5 @@ clickhouse:
   config:
     settings:
       default_replica_path: /var/lib/clickhouse/
+      default_password: clickhouse
 
-# Zookeeper configuration
-zookeeper:
-  enabled: true
-  replicas: 1
-  image:
-    repository: zookeeper
-    tag: 3.8.0
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      memory: "1Gi"
-      cpu: "0.5"
-    limits:
-      memory: "2Gi"
-      cpu: "1"
-  service:
-    type: ClusterIP
-    clientPort: 2181
-    leaderElectionPort: 3888
-    serverPort: 2888
-  persistence:
-    enabled: true
-    mountPath: /data 

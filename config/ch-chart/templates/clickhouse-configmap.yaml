@@ -1,9 +1,8 @@
-{{- if .Values.clickhouse.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: clickhouse-config
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.namespace }}
   labels:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
@@ -15,17 +14,67 @@ data:
       <user_files_path>{{ .Values.clickhouse.persistence.mountPath }}/user_files</user_files_path>
       <format_schema_path>{{ .Values.clickhouse.persistence.mountPath }}/format_schemas</format_schema_path>
       
+      <listen_host>0.0.0.0</listen_host>
+
+      <users>
+        <default>
+            <password>{{ .Values.clickhouse.config.settings.default_password }}</password>
+            <access_management>1</access_management>
+        </default>
+      </users>
+
       {{- if .Values.clickhouse.config.settings.default_replica_path }}
       <default_replica_path>{{ .Values.clickhouse.config.settings.default_replica_path }}</default_replica_path>
       {{- end }}
+
+      <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+
+        <raft_configuration>
+            {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+            {{- range $i := until $replicaCount }}
+            <server>
+                <id>{{ add $i 1 }}</id>
+                <hostname>clickhouse-{{ $i }}</hostname>
+                <port>9234</port>
+            </server>
+            {{- end }}
+        </raft_configuration>
+      </keeper_server>
       
-      {{- if .Values.zookeeper.enabled }}
       <zookeeper>
+        {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+        {{- range $i := until $replicaCount }}
         <node>
-          <host>zookeeper</host>
-          <port>{{ .Values.zookeeper.service.clientPort }}</port>
+            <host>clickhouse-{{ $i }}</host>
+            <port>9181</port>
         </node>
+        {{- end }}
       </zookeeper>
-      {{- end }}
+
+      <remote_servers>
+        <main_cluster>
+          {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+          {{- range $i := until $replicaCount }}
+          <shard>
+              <replica>
+                <host>clickhouse-{{ $i }}</host>
+                <port>9000</port>
+                <user>default</user>
+                <password>{{ .Values.clickhouse.config.settings.default_password }}</password>
+              </replica>
+          </shard>
+          {{- end }}
+        </main_cluster>
+      </remote_servers>
     </clickhouse>
-{{- end }} 
+

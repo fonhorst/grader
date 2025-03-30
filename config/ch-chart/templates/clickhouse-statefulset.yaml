@@ -1,9 +1,8 @@
-{{- if .Values.clickhouse.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: clickhouse
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.namespace }}
   labels:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
@@ -54,9 +53,9 @@ spec:
       name: data
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      storageClassName: {{ $.Values.storage.className }}
+      storageClassName: {{ .Values.storage.className }}
       resources:
         requests:
-          storage: {{ (index .Values.storage.persistentVolumeClaims 0).size }}
+          storage: {{ .Values.storage.size }}
   {{- end }}
-{{- end }} 
+
