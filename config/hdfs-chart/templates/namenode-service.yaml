@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: namenode
-  namespace: {{ .Values.namespace.name }}
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     app: namenode
