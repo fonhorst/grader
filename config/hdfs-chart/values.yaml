@@ -3,7 +3,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 namespace:
-  name: hdfs-3
+  name: hdfs
   create: true
 
 nameNode:
