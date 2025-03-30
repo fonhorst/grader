@@ -41,9 +41,16 @@ spec:
         - name: data
           mountPath: {{ .Values.clickhouse.persistence.mountPath }}
         {{- end }}
+        - name: pre-init
+          mountPath: /pre-init.sh
+          subPath: pre-init.sh
+          mode: 0755
+        - name: preprocessor
+          mountPath: /preprocessor.py
+          subPath: preprocessor.py
         - name: config
-          mountPath: /etc/clickhouse-server/config.d/custom-config.xml
-          subPath: custom-config.xml
+          mountPath: /etc/clickhouse-server/custom-config.xml.template
+          subPath: custom-config.xml.template
       volumes:
       - name: config
         configMap:

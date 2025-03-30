@@ -7,7 +7,36 @@ metadata:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
 data:
-  custom-config.xml: |-
+  pre-init.sh: |-
+    #!/bin/bash
+    
+    set -e
+    echo "Pre-initializing ClickHouse configuration"
+    cat /etc/clickhouse-server/custom-config.xml.template | python3 /preprocessor.py > /etc/clickhouse-server/config.d/custom-config.xml
+    echo "Pre-initialization complete"
+    set +e
+    echo "Starting ClickHouse /entrypoint.sh"
+    exec /entrypoint.sh
+
+  preprocessor.py: |-
+    import sys
+    import json
+    import os
+    import re
+
+    def main():
+        # Read the input from stdin
+        data = sys.stdin.read()
+        if 'HOSTNAME' not in os.environ:
+            raise Exception("HOSTNAME env var is not set")
+        server_id = int(os.environ['HOSTNAME'].split('-')[-1].strip())
+        out = data.format(server_id=server_id)
+        print(out)
+
+    if __name__ == "__main__":
+        main()
+
+  custom-config.xml.template: |-
     <clickhouse>
       <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
       <!-- <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>
@@ -23,7 +52,7 @@ data:
 
       <keeper_server>
         <tcp_port>9181</tcp_port>
-        <server_id>1</server_id>
+        <server_id>{server_id}</server_id>
         <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
         <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
 
