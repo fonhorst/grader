@@ -27,6 +27,8 @@ spec:
           value: /opt/hadoop
         - name: HADOOP_CONF_DIR
           value: /etc/hadoop
+        - name: HDFS_CONF_dfs_namenode_name_dir
+          value: file:///hadoop/dfs/name
         - name: CLUSTER_NAME
           value: {{ .Values.clusterName }}
         - name: HADOOP_HEAPSIZE_MAX
