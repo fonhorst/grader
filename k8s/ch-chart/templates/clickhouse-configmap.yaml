@@ -20,7 +20,10 @@ data:
     fi
     
     # Extract the server ID from the hostname (the number after the last dash)
-    SERVER_ID=$(echo "$HOSTNAME" | grep -o '[0-9]*$')
+    BASE_ID=$(echo "$HOSTNAME" | grep -o '[0-9]*$')
+    
+    # Add 1 to the server ID
+    SERVER_ID=$((BASE_ID + 1))
     
     # Process the template file and replace {server_id} with the actual server ID
     sed "s/{server_id}/$SERVER_ID/g" /etc/clickhouse-server/custom-config.xml.template > /etc/clickhouse-server/config.d/custom-config.xml

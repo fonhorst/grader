@@ -22,7 +22,7 @@ spec:
       - name: clickhouse
         image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
         imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
-        entrypoint: ["/pre-init.sh"]
+        command: ["/pre-init.sh"]
         ports:
         - name: http
           containerPort: {{ .Values.clickhouse.service.httpPort }}
