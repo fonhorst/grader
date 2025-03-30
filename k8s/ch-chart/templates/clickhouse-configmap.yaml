@@ -7,68 +7,482 @@ metadata:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
 data:
+  # config.xml: |-
+  #   <clickhouse>
+  #     <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
+  #     <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>
+  #     <user_files_path>{{ .Values.clickhouse.persistence.mountPath }}/user_files</user_files_path>
+  #     <format_schema_path>{{ .Values.clickhouse.persistence.mountPath }}/format_schemas</format_schema_path>
+      
+  #     <listen_host>0.0.0.0</listen_host>
+
+  #     {{- if .Values.clickhouse.config.settings.default_replica_path }}
+  #     <default_replica_path>{{ .Values.clickhouse.config.settings.default_replica_path }}</default_replica_path>
+  #     {{- end }}
+
+  #     <keeper_server>
+  #       <tcp_port>9181</tcp_port>
+  #       <server_id>1</server_id>
+  #       <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+  #       <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+  #       <coordination_settings>
+  #           <operation_timeout_ms>10000</operation_timeout_ms>
+  #           <session_timeout_ms>30000</session_timeout_ms>
+  #           <raft_logs_level>warning</raft_logs_level>
+  #       </coordination_settings>
+
+  #       <raft_configuration>
+  #           {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+  #           {{- range $i := until $replicaCount }}
+  #           <server>
+  #               <id>{{ add $i 1 }}</id>
+  #               <hostname>clickhouse-{{ $i }}</hostname>
+  #               <port>9234</port>
+  #           </server>
+  #           {{- end }}
+  #       </raft_configuration>
+  #     </keeper_server>
+      
+  #     <zookeeper>
+  #       {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+  #       {{- range $i := until $replicaCount }}
+  #       <node>
+  #           <host>clickhouse-{{ $i }}</host>
+  #           <port>9181</port>
+  #       </node>
+  #       {{- end }}
+  #     </zookeeper>
+
+  #     <remote_servers>
+  #       <{{ .Values.clickhouse.config.clusterName }}>
+  #         {{- $replicaCount := int .Values.clickhouse.replicaCount }}
+  #         {{- range $i := until $replicaCount }}
+  #         <shard>
+  #             <replica>
+  #               <host>clickhouse-{{ $i }}</host>
+  #               <port>9000</port>
+  #               <user>default</user>
+  #               <password>{{ .Values.clickhouse.config.settings.default_password }}</password>
+  #             </replica>
+  #         </shard>
+  #         {{- end }}
+  #       </{{ .Values.clickhouse.config.clusterName }}>
+  #     </remote_servers>
+  #   </clickhouse>
+
   config.xml: |-
     <clickhouse>
-      <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
-      <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>
-      <user_files_path>{{ .Values.clickhouse.persistence.mountPath }}/user_files</user_files_path>
-      <format_schema_path>{{ .Values.clickhouse.persistence.mountPath }}/format_schemas</format_schema_path>
-      
-      <listen_host>0.0.0.0</listen_host>
+      <logger>
+          <level>trace</level>
+          <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+          <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+          <size>1000M</size>
+          <count>10</count>
+      </logger>
 
-      {{- if .Values.clickhouse.config.settings.default_replica_path }}
-      <default_replica_path>{{ .Values.clickhouse.config.settings.default_replica_path }}</default_replica_path>
-      {{- end }}
+      <url_scheme_mappers>
+          <s3>
+              <to>https://{bucket}.s3.amazonaws.com</to>
+          </s3>
+          <gs>
+              <to>https://storage.googleapis.com/{bucket}</to>
+          </gs>
+          <oss>
+              <to>https://{bucket}.oss.aliyuncs.com</to>
+          </oss>
+      </url_scheme_mappers>
 
-      <keeper_server>
-        <tcp_port>9181</tcp_port>
-        <server_id>1</server_id>
-        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
-        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+      <http_options_response>
+          <header>
+              <name>Access-Control-Allow-Origin</name>
+              <value>*</value>
+          </header>
+          <header>
+              <name>Access-Control-Allow-Headers</name>
+              <value>origin, x-requested-with, x-clickhouse-format, x-clickhouse-user, x-clickhouse-key, Authorization</value>
+          </header>
+          <header>
+              <name>Access-Control-Allow-Methods</name>
+              <value>POST, GET, OPTIONS</value>
+          </header>
+          <header>
+              <name>Access-Control-Max-Age</name>
+              <value>86400</value>
+          </header>
+      </http_options_response>
 
-        <coordination_settings>
-            <operation_timeout_ms>10000</operation_timeout_ms>
-            <session_timeout_ms>30000</session_timeout_ms>
-            <raft_logs_level>warning</raft_logs_level>
-        </coordination_settings>
+      <http_port>8123</http_port>
 
-        <raft_configuration>
-            {{- $replicaCount := int .Values.clickhouse.replicaCount }}
-            {{- range $i := until $replicaCount }}
-            <server>
-                <id>{{ add $i 1 }}</id>
-                <hostname>clickhouse-{{ $i }}</hostname>
-                <port>9234</port>
-            </server>
-            {{- end }}
-        </raft_configuration>
-      </keeper_server>
-      
-      <zookeeper>
-        {{- $replicaCount := int .Values.clickhouse.replicaCount }}
-        {{- range $i := until $replicaCount }}
-        <node>
-            <host>clickhouse-{{ $i }}</host>
-            <port>9181</port>
-        </node>
-        {{- end }}
-      </zookeeper>
+      <tcp_port>9000</tcp_port>
 
-      <remote_servers>
-        <{{ .Values.clickhouse.config.clusterName }}>
-          {{- $replicaCount := int .Values.clickhouse.replicaCount }}
-          {{- range $i := until $replicaCount }}
-          <shard>
-              <replica>
-                <host>clickhouse-{{ $i }}</host>
-                <port>9000</port>
-                <user>default</user>
-                <password>{{ .Values.clickhouse.config.settings.default_password }}</password>
-              </replica>
-          </shard>
-          {{- end }}
-        </{{ .Values.clickhouse.config.clusterName }}>
-      </remote_servers>
+      <mysql_port>9004</mysql_port>
+
+      <postgresql_port>9005</postgresql_port>
+
+      <interserver_http_port>9009</interserver_http_port>
+
+      <ssh_server>
+      </ssh_server>
+
+      <keep_alive_timeout>10</keep_alive_timeout>
+
+      <grpc>
+          <enable_ssl>false</enable_ssl>
+          <ssl_cert_file>/path/to/ssl_cert_file</ssl_cert_file>
+          <ssl_key_file>/path/to/ssl_key_file</ssl_key_file>
+          <ssl_require_client_auth>false</ssl_require_client_auth>
+          <ssl_ca_cert_file>/path/to/ssl_ca_cert_file</ssl_ca_cert_file>
+          <transport_compression_type>none</transport_compression_type>
+          <transport_compression_level>0</transport_compression_level>
+          <max_send_message_size>-1</max_send_message_size>
+          <max_receive_message_size>-1</max_receive_message_size>
+          <verbose_logs>false</verbose_logs>
+      </grpc>
+      <openSSL>
+          <server>
+              <verificationMode>none</verificationMode>
+              <loadDefaultCAFile>true</loadDefaultCAFile>
+              <cacheSessions>true</cacheSessions>
+              <disableProtocols>sslv2,sslv3</disableProtocols>
+              <preferServerCiphers>true</preferServerCiphers>
+              <invalidCertificateHandler>
+                  <name>RejectCertificateHandler</name>
+              </invalidCertificateHandler>
+          </server>
+
+          <client>
+              <loadDefaultCAFile>true</loadDefaultCAFile>
+              <cacheSessions>true</cacheSessions>
+              <disableProtocols>sslv2,sslv3</disableProtocols>
+              <preferServerCiphers>true</preferServerCiphers>
+              <invalidCertificateHandler>
+                  <name>RejectCertificateHandler</name>
+              </invalidCertificateHandler>
+          </client>
+      </openSSL>
+      <concurrent_threads_soft_limit_num>0</concurrent_threads_soft_limit_num>
+      <concurrent_threads_soft_limit_ratio_to_cores>2</concurrent_threads_soft_limit_ratio_to_cores>
+      <concurrent_threads_scheduler>fair_round_robin</concurrent_threads_scheduler>
+      <max_concurrent_queries>1000</max_concurrent_queries>
+      <max_server_memory_usage>0</max_server_memory_usage>
+      <max_thread_pool_size>10000</max_thread_pool_size>
+      <async_load_databases>true</async_load_databases>
+      <max_server_memory_usage_to_ram_ratio>0.9</max_server_memory_usage_to_ram_ratio>
+      <total_memory_profiler_step>4194304</total_memory_profiler_step>
+      <total_memory_tracker_sample_probability>0</total_memory_tracker_sample_probability>
+      <uncompressed_cache_size>8589934592</uncompressed_cache_size>
+      <custom_cached_disks_base_directory>/var/lib/clickhouse/caches/</custom_cached_disks_base_directory>
+
+      <validate_tcp_client_information>false</validate_tcp_client_information>
+      <path>/var/lib/clickhouse/</path>
+
+      <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+
+      <allow_plaintext_password>1</allow_plaintext_password>
+      <allow_no_password>1</allow_no_password>
+      <allow_implicit_no_password>1</allow_implicit_no_password>
+      <default_password_type>sha256_password</default_password_type>
+      <bcrypt_workfactor>12</bcrypt_workfactor>
+
+      <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+
+      <user_directories>
+          <users_xml>
+              <path>users.xml</path>
+          </users_xml>
+          <local_directory>
+              <path>/var/lib/clickhouse/access/</path>
+          </local_directory>
+      </user_directories>
+
+      <access_control_improvements>
+          <users_without_row_policies_can_read_rows>true</users_without_row_policies_can_read_rows>
+          <on_cluster_queries_require_cluster_grant>true</on_cluster_queries_require_cluster_grant>
+
+          <select_from_system_db_requires_grant>true</select_from_system_db_requires_grant>
+
+          <select_from_information_schema_requires_grant>true</select_from_information_schema_requires_grant>
+
+          <settings_constraints_replace_previous>true</settings_constraints_replace_previous>
+
+          <table_engines_require_grant>false</table_engines_require_grant>
+
+          <role_cache_expiration_time_seconds>600</role_cache_expiration_time_seconds>
+      </access_control_improvements>
+
+      <default_profile>default</default_profile>
+
+      <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
+      <default_database>default</default_database>
+
+      <mlock_executable>true</mlock_executable>
+
+      <remap_executable>false</remap_executable>
+
+      <builtin_dictionaries_reload_interval>3600</builtin_dictionaries_reload_interval>
+
+      <max_session_timeout>3600</max_session_timeout>
+
+      <default_session_timeout>60</default_session_timeout>
+
+      <query_log>
+          <database>system</database>
+          <table>query_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+      </query_log>
+
+      <trace_log>
+          <database>system</database>
+          <table>trace_log</table>
+
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+          <symbolize>true</symbolize>
+      </trace_log>
+
+      <query_thread_log>
+          <database>system</database>
+          <table>query_thread_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+      </query_thread_log>
+
+      <query_views_log>
+          <database>system</database>
+          <table>query_views_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+      </query_views_log>
+
+      <part_log>
+          <database>system</database>
+          <table>part_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+      </part_log>
+
+      <text_log>
+          <database>system</database>
+          <table>text_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+          <level>trace</level>
+      </text_log>
+
+      <metric_log>
+          <database>system</database>
+          <table>metric_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+          <flush_on_crash>false</flush_on_crash>
+      </metric_log>
+
+      <latency_log>
+          <database>system</database>
+          <table>latency_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+          <flush_on_crash>false</flush_on_crash>
+      </latency_log>
+
+      <error_log>
+          <database>system</database>
+          <table>error_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+          <flush_on_crash>false</flush_on_crash>
+      </error_log>
+
+          <database>system</database>
+          <table>query_metric_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+          <flush_on_crash>false</flush_on_crash>
+      </query_metric_log>
+
+      <asynchronous_metric_log>
+          <database>system</database>
+          <table>asynchronous_metric_log</table>
+          <flush_interval_milliseconds>7000</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+      </asynchronous_metric_log>
+
+      <opentelemetry_span_log>
+          <engine>
+              engine MergeTree
+              partition by toYYYYMM(finish_date)
+              order by (finish_date, finish_time_us)
+          </engine>
+          <database>system</database>
+          <table>opentelemetry_span_log</table>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+      </opentelemetry_span_log>
+
+      <crash_log>
+          <database>system</database>
+          <table>crash_log</table>
+
+          <partition_by />
+          <flush_interval_milliseconds>1000</flush_interval_milliseconds>
+          <max_size_rows>1024</max_size_rows>
+          <reserved_size_rows>1024</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>512</buffer_size_rows_flush_threshold>
+          <flush_on_crash>true</flush_on_crash>
+      </crash_log>
+
+      <processors_profile_log>
+          <database>system</database>
+          <table>processors_profile_log</table>
+
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+          <ttl>event_date + INTERVAL 30 DAY DELETE</ttl>
+      </processors_profile_log>
+
+      <asynchronous_insert_log>
+          <database>system</database>
+          <table>asynchronous_insert_log</table>
+
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <max_size_rows>1048576</max_size_rows>
+          <reserved_size_rows>8192</reserved_size_rows>
+          <buffer_size_rows_flush_threshold>524288</buffer_size_rows_flush_threshold>
+          <flush_on_crash>false</flush_on_crash>
+          <partition_by>event_date</partition_by>
+          <ttl>event_date + INTERVAL 3 DAY</ttl>
+      </asynchronous_insert_log>
+
+      <backup_log>
+          <database>system</database>
+          <table>backup_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+      </backup_log>
+
+      <s3queue_log>
+          <database>system</database>
+          <table>s3queue_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+      </s3queue_log>
+
+      <blob_storage_log>
+          <database>system</database>
+          <table>blob_storage_log</table>
+          <partition_by>toYYYYMM(event_date)</partition_by>
+          <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+          <ttl>event_date + INTERVAL 30 DAY</ttl>
+      </blob_storage_log>
+
+      <top_level_domains_lists>
+      </top_level_domains_lists>
+
+      <dictionaries_config>*_dictionary.*ml</dictionaries_config>
+
+      <dictionaries_lazy_load>true</dictionaries_lazy_load>
+
+      <wait_dictionaries_load_at_startup>true</wait_dictionaries_load_at_startup>
+
+      <user_defined_executable_functions_config>*_function.*ml</user_defined_executable_functions_config>
+
+      <encryption_codecs>
+      </encryption_codecs>
+
+      <distributed_ddl>
+          <path>/clickhouse/task_queue/ddl</path>
+          <replicas_path>/clickhouse/task_queue/replicas</replicas_path>
+      </distributed_ddl>
+
+      <graphite_rollup_example>
+          <pattern>
+              <regexp>click_cost</regexp>
+              <function>any</function>
+              <retention>
+                  <age>0</age>
+                  <precision>3600</precision>
+              </retention>
+              <retention>
+                  <age>86400</age>
+                  <precision>60</precision>
+              </retention>
+          </pattern>
+          <default>
+              <function>max</function>
+              <retention>
+                  <age>0</age>
+                  <precision>60</precision>
+              </retention>
+              <retention>
+                  <age>3600</age>
+                  <precision>300</precision>
+              </retention>
+              <retention>
+                  <age>86400</age>
+                  <precision>3600</precision>
+              </retention>
+          </default>
+      </graphite_rollup_example>
+
+      <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+
+      <google_protos_path>/usr/share/clickhouse/protos/</google_protos_path>
+
+      <send_crash_reports>
+          <enabled>false</enabled>
+          <anonymize>false</anonymize>
+          <endpoint>https://6f33034cfe684dd7a3ab9875e57b1c8d@o388870.ingest.sentry.io/5226277</endpoint>
+          <send_logical_errors>false</send_logical_errors>
+      </send_crash_reports>
+
+      <backups>
+          <allowed_path>backups</allowed_path>
+          <remove_backup_files_after_failure>true</remove_backup_files_after_failure>
+      </backups>
     </clickhouse>
   
   users.xml: |-
@@ -89,37 +503,21 @@ data:
                   <ip>::/0</ip>
               </networks>
 
-              <!-- Settings profile for user. -->
               <profile>default</profile>
 
-              <!-- Quota for user. -->
               <quota>default</quota>
 
-              <!-- User can create other users and grant rights to them. -->
               <access_management>1</access_management>
 
-              <!-- User can manipulate named collections. -->
               <named_collection_control>1</named_collection_control>
-
-              <!-- User permissions can be granted here -->
-              <!--
-              <grants>
-                  <query>GRANT ALL ON *.*</query>
-              </grants>
-              -->
           </default>
       </users>
 
-      <!-- Quotas. -->
       <quotas>
-          <!-- Name of quota. -->
           <default>
-              <!-- Limits for time interval. You could specify many intervals with different limits. -->
               <interval>
-                  <!-- Length of interval. -->
                   <duration>3600</duration>
 
-                  <!-- No limits. Just calculate resource usage for time interval. -->
                   <queries>0</queries>
                   <errors>0</errors>
                   <result_rows>0</result_rows>
@@ -130,17 +528,10 @@ data:
       </quotas>
     </clickhouse>
 
-config_d_docker_related_config.xml: |-
-  <clickhouse>
-     <!-- Listen wildcard address to allow accepting connections from other containers and host network. -->
-    <listen_host>::</listen_host>
-    <listen_host>0.0.0.0</listen_host>
-    <listen_try>1</listen_try>
-
-    <!--
-    <logger>
-        <console>1</console>
-    </logger>
-    -->
-  </clickhouse>
+  config_d_docker_related_config.xml: |-
+    <clickhouse>
+      <listen_host>::</listen_host>
+      <listen_host>0.0.0.0</listen_host>
+      <listen_try>1</listen_try>
+    </clickhouse>
 
