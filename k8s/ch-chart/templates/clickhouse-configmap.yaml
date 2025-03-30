@@ -2,12 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: clickhouse-config
-  namespace: {{ .Release.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
 data:
-  custom-settings.xml: |-
+  config.xml: |-
     <clickhouse>
       <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
       <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>

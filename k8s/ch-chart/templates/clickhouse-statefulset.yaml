@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: clickhouse
-  namespace: {{ .Release.namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
@@ -31,18 +31,14 @@ spec:
           {{- toYaml .Values.clickhouse.resources | nindent 10 }}
         env:
         - name: CLICKHOUSE_CONFIG
-          value: /etc/clickhouse-server/config.xml
-        {{- if .Values.zookeeper.enabled }}
-        - name: CLICKHOUSE_ZOOKEEPER_HOSTS
-          value: "zookeeper:{{ .Values.zookeeper.service.clientPort }}"
-        {{- end }}
+          value: /etc/clickhouse-server/config.xml}
         volumeMounts:
         {{- if .Values.clickhouse.persistence.enabled }}
         - name: data
           mountPath: {{ .Values.clickhouse.persistence.mountPath }}
         {{- end }}
         - name: config
-          mountPath: /etc/clickhouse-server/config.d/
+          mountPath: /etc/clickhouse-server/
       volumes:
       - name: config
         configMap:
