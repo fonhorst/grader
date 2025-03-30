@@ -12,7 +12,7 @@ if [ -z "$CLUSTER_NAME" ]; then
 fi
 
 echo "remove lost+found from $namedir"
-rm -r $namedir/lost+found
+rm -rf $namedir/lost+found
 
 if [ "`ls -A $namedir`" == "" ]; then
   echo "Formatting namenode name directory: $namedir"
