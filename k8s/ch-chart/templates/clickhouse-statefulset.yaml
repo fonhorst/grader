@@ -41,19 +41,20 @@ spec:
         - name: data
           mountPath: {{ .Values.clickhouse.persistence.mountPath }}
         {{- end }}
-        # - name: config
-        #   mountPath: /etc/clickhouse-server
+        - name: config
+          mountPath: /etc/clickhouse-server/config.d/custom-config.xml
+          subPath: custom-config.xml
       volumes:
       - name: config
         configMap:
           name: clickhouse-config
-          items:
-          - key: config.xml
-            path: config.xml
-          - key: users.xml
-            path: users.xml
-          - key: config_d_docker_related_config.xml
-            path: config.d/docker_related_config.xml
+          # items:
+          # - key: config.xml
+          #   path: config.xml
+          # - key: users.xml
+          #   path: users.xml
+          # - key: config_d_docker_related_config.xml
+          #   path: config.d/docker_related_config.xml
   {{- if .Values.clickhouse.persistence.enabled }}
   volumeClaimTemplates:
   - metadata:
