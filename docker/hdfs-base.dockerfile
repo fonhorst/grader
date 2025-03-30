@@ -1,7 +1,9 @@
-FROM debian:9
+FROM debian:bullseye-20250317
+
+ARG HADOOP_VERSION=3.4.1
 
 RUN apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      openjdk-8-jdk \
+      openjdk-11-jdk \
       net-tools \
       curl \
       netcat \
@@ -15,7 +17,6 @@ RUN curl -O https://dist.apache.org/repos/dist/release/hadoop/common/KEYS
 
 RUN gpg --import KEYS
 
-ENV HADOOP_VERSION 3.2.2
 ENV HADOOP_URL https://www.apache.org/dist/hadoop/common/hadoop-$HADOOP_VERSION/hadoop-$HADOOP_VERSION.tar.gz
 
 RUN set -x \

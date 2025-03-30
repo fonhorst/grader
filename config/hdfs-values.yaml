@@ -11,7 +11,7 @@ clusterName: grader-hdfs
 nameNode:
   replicaCount: 1
   image:
-    repository: node2.bdcl:5000/hadoop_322_namenode
+    repository: node2.bdcl:5000/grader-hdfs-namenode
     tag: latest
     pullPolicy: IfNotPresent
   resources:
@@ -34,9 +34,9 @@ nameNode:
     name: namenode-config
 
 dataNode:
-  replicaCount: 3
+  replicaCount: 1
   image:
-    repository: node2.bdcl:5000/hadoop_322_datanode
+    repository: node2.bdcl:5000/grader-hdfs-datanode
     tag: latest
     pullPolicy: IfNotPresent
   resources:

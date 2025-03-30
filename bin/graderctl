@@ -2,6 +2,7 @@
 
 set -e
 
+HADOOP_VERSION=3.4.1
 BASE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-base:latest"
 DATANODE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-datanode:latest"
 NAMENODE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-namenode:latest"
@@ -18,11 +19,11 @@ function show_usage {
 function build_hdfs_images {
     echo "Building Docker images..."
     echo "Building base image (1 / 3)"
-    docker build -t "$BASE_IMAGE_NAME" -f ./docker/hdfs-base.dockerfile ./docker
+    docker build --build-arg "HADOOP_VERSION=$HADOOP_VERSION" -t "$BASE_IMAGE_NAME" -f ./docker/hdfs-base.dockerfile ./docker
     echo "Building datanode image (2 / 3)"
-    docker build --build-arg "BASE_IMAGE_NAME=$BASE_IMAGE_NAME" -t "$DATANODE_IMAGE_NAME" -f ./docker/hdfs-datanode.dockerfile ./docker
+    docker build --build-arg "BASE_IMAGE=$BASE_IMAGE_NAME" -t "$DATANODE_IMAGE_NAME" -f ./docker/hdfs-datanode.dockerfile ./docker
     echo "Building namenode image (3 / 3)"
-    docker build --build-arg "BASE_IMAGE_NAME=$BASE_IMAGE_NAME" -t "$NAMENODE_IMAGE_NAME" -f ./docker/hdfs-namenode.dockerfile ./docker
+    docker build --build-arg "BASE_IMAGE=$BASE_IMAGE_NAME" -t "$NAMENODE_IMAGE_NAME" -f ./docker/hdfs-namenode.dockerfile ./docker
     echo "Build completed successfully!"
 }
 
