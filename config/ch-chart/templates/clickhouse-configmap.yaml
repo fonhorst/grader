@@ -62,7 +62,7 @@ data:
       </zookeeper>
 
       <remote_servers>
-        <main_cluster>
+        <{{ .Values.clickhouse.config.clusterName }}>
           {{- $replicaCount := int .Values.clickhouse.replicaCount }}
           {{- range $i := until $replicaCount }}
           <shard>
@@ -74,7 +74,7 @@ data:
               </replica>
           </shard>
           {{- end }}
-        </main_cluster>
+        </{{ .Values.clickhouse.config.clusterName }}>
       </remote_servers>
     </clickhouse>
 

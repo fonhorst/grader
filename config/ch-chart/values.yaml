@@ -6,14 +6,14 @@ storage:
 
 # Labels
 labels:
-  service: general-clickhouse
+  service: clickhouse
 
 # Clickhouse configuration
 clickhouse:
   replicas: 1
   image:
-    repository: clickhouse/clickhouse-server
-    tag: 22.3.13
+    repository: clickhouse
+    tag: 25.3.2.39
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -30,6 +30,7 @@ clickhouse:
     enabled: true
     mountPath: /var/lib/clickhouse
   config:
+    clusterName: "main_cluster"
     settings:
       default_replica_path: /var/lib/clickhouse/
       default_password: clickhouse
