@@ -7,7 +7,7 @@ metadata:
     {{- include "clickhouse.labels" . | nindent 4 }}
     app: clickhouse
 spec:
-  serviceName: clickhouse
+  serviceName: {{ .Values.clickhouse.serviceName }}
   replicas: {{ .Values.clickhouse.replicas }}
   selector:
     matchLabels:

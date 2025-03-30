@@ -64,7 +64,7 @@ data:
             {{- range $i := until $replicaCount }}
             <server>
                 <id>{{ add $i 1 }}</id>
-                <hostname>clickhouse-{{ $i }}</hostname>
+                <hostname>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</hostname>
                 <port>9234</port>
             </server>
             {{- end }}
@@ -75,7 +75,7 @@ data:
         {{- $replicaCount := int .Values.clickhouse.replicas}}
         {{- range $i := until $replicaCount }}
         <node>
-            <host>clickhouse-{{ $i }}</host>
+            <host>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</host>
             <port>9181</port>
         </node>
         {{- end }}
@@ -87,7 +87,7 @@ data:
           {{- range $i := until $replicaCount }}
           <shard>
               <replica>
-                <host>clickhouse-{{ $i }}</host>
+                <host>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</host>
                 <port>9000</port>
                 <user>admin</user>
                 <password>admin</password>

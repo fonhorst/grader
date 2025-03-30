@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: clickhouse
+  name: {{ .Values.clickhouse.serviceName }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "clickhouse.labels" . | nindent 4 }}
