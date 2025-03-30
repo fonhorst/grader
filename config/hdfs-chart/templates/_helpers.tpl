@@ -21,4 +21,12 @@ If release name contains chart name it will be used as a full name.
 {{- $name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
-{{- end }} 
+{{- end }}
+
+{{/* 
+Calculate heap size from memory resources by subtracting overhead
+*/}}
+{{- define "hdfs.calculateHeapSize" -}}
+{{- $memory := . | replace "Gi" "000" | replace "Mi" "" | int -}}
+{{- sub $memory 500 -}}
+{{- end -}} 

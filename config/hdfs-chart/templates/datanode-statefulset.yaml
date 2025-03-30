@@ -31,9 +31,9 @@ spec:
         - name: CLUSTER_NAME
           value: {{ .Values.clusterName }}
         - name: HADOOP_HEAPSIZE_MAX
-          value: {{ .Values.dataNode.resources.limits.memory | replace "Gi" "000" | replace "Mi" "" | int | sub 500 | toString }}M
+          value: {{ include "hdfs.calculateHeapSize" .Values.dataNode.resources.limits.memory | quote }}
         - name: HADOOP_HEAPSIZE_MIN
-          value: {{ .Values.dataNode.resources.requests.memory | replace "Gi" "000" | replace "Mi" "" | int | sub 500 | toString }}M
+          value: {{ include "hdfs.calculateHeapSize" .Values.dataNode.resources.requests.memory | quote }}
         volumeMounts:
         - name: hdfs-data
           mountPath: /hadoop/dfs/data
