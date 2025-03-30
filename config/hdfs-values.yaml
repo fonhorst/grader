@@ -13,7 +13,7 @@ nameNode:
   image:
     repository: node2.bdcl:5000/grader-hdfs-namenode
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources:
     requests:
       cpu: 2
@@ -38,7 +38,7 @@ dataNode:
   image:
     repository: node2.bdcl:5000/grader-hdfs-datanode
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources:
     requests:
       cpu: 2
