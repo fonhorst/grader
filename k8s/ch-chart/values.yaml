@@ -12,6 +12,7 @@ labels:
 clickhouse:
   replicas: 1
   serviceName: clickhouse
+  accessManagement: 1
   image:
     repository: clickhouse
     tag: 25.3.2.39

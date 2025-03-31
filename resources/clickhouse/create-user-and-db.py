@@ -21,7 +21,7 @@ def create_user_and_db(host, admin_user, admin_password, new_username, new_passw
         # Create user on cluster
         client.execute(f"""
             CREATE USER IF NOT EXISTS `{new_username}` ON CLUSTER `{cluster_name}`
-            IDENTIFIED WITH sha256_password BY '{new_password}'
+            IDENTIFIED WITH plaintext_password BY '{new_password}'
         """)
         
         # Grant privileges
@@ -50,8 +50,8 @@ def create_user_and_db(host, admin_user, admin_password, new_username, new_passw
 
 def main():
     parser = argparse.ArgumentParser(description='Create a ClickHouse user and database')
-    parser.add_argument('--host', required=True, help='ClickHouse host address')
-    parser.add_argument('--admin-user', required=True, help='Admin username')
+    parser.add_argument('--host', default='localhost', help='ClickHouse host address')
+    parser.add_argument('--admin-user', default='admin', help='Admin username')
     parser.add_argument('--new-username', required=True, help='New username to create')
     parser.add_argument('--cluster-name', default='main_cluster', help='ClickHouse cluster name')
     

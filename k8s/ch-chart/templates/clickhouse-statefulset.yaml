@@ -37,6 +37,8 @@ spec:
           value: admin
         - name: CLICKHOUSE_PASSWORD
           value: admin
+        - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+          value: "{{ .Values.clickhouse.accessManagement }}"
         volumeMounts:
         {{- if .Values.clickhouse.persistence.enabled }}
         - name: data
