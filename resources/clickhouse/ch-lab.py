@@ -3,10 +3,10 @@ import pandas as pd
 from pathlib import Path
 
 class ClickHouseSetup:
-    def __init__(self, host='clickhouse-1.clickhouse.clickh', user='aal_372475', password=None):
+    def __init__(self, host='localhost', user='tutor', password=None):
         self.client = Client(host=host, user=user, password=password)
         self.cluster_name = 'kube_clickhouse_cluster'
-        self.database = 'aal_372475'
+        self.database = f"{user}_db"
 
     def execute_query(self, query):
         return self.client.execute(query)
@@ -140,7 +140,7 @@ def main():
     ch_setup.create_final_mvs()
 
     # Load data
-    parquet_path = '/nfs/shared/clickhouse_data/transactions_12M.parquet'
+    parquet_path = './resources/clickhouse/data/transactions_12M.parquet'
     if Path(parquet_path).exists():
         print("Loading data from parquet file...")
         ch_setup.load_data(parquet_path)
