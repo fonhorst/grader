@@ -3,9 +3,9 @@ import pandas as pd
 from pathlib import Path
 
 class ClickHouseSetup:
-    def __init__(self, host='localhost', user='tutor', password=None):
+    def __init__(self, host='localhost', user='tutor', cluster_name='kube_clickhouse_cluster', password=None):
         self.client = Client(host=host, user=user, password=password)
-        self.cluster_name = 'kube_clickhouse_cluster'
+        self.cluster_name = cluster_name
         self.database = f"{user}_db"
 
     def execute_query(self, query):
@@ -123,8 +123,13 @@ class ClickHouseSetup:
 
 def main():
     # Initialize ClickHouse setup
-    password = input("Enter ClickHouse password: ")
-    ch_setup = ClickHouseSetup(password=password)
+    user = 'tutor'
+    password = input(f"Enter ClickHouse password (for user {user}): ")
+    ch_setup = ClickHouseSetup(
+        user='tutor',
+        cluster_name='main_cluster',
+        password=password
+    )
 
     # Create all necessary tables and views
     print("Creating base tables...")
