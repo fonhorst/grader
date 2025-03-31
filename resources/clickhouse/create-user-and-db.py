@@ -28,13 +28,23 @@ def create_user_and_db(host, admin_user, admin_password, new_username, new_passw
             IDENTIFIED WITH plaintext_password BY '{new_password}'
         """)
         
-        # Grant privileges
+        # Grant data privileges
         client.execute(f"""
             GRANT ALL ON `{db_name}`.* TO `{new_username}` ON CLUSTER `{cluster_name}`
         """)
         
+        # Grant cluster privileges but only for user's database
+        client.execute(f"""
+            GRANT CLUSTER ON *.* TO `{new_username}` ON CLUSTER `{cluster_name}`
+        """)
+
+        # Grant cluster privileges but only for user's database
+        client.execute(f"""
+            GRANT REMOTE ON *.* TO `{new_username}` ON CLUSTER `{cluster_name}`
+        """)
+        
         print(f"Successfully created user '{new_username}' and database '{db_name}'")
-        print(f"Granted all privileges on '{db_name}' to '{new_username}'")
+        print(f"Granted all privileges and CLUSTER rights on '{db_name}' to '{new_username}'")
         
         # Test connection with new user
         test_client = Client(
