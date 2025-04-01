@@ -897,13 +897,7 @@ class ClickHouseChecker(LabChecker):
             self.checker_report.include(outcome_mv_report)
         
         # MV option 1: Average amounts
-        avg_report, avg_create_query = check_table_exists(
-            self.client,
-            self.student_db,
-            "avg_amount", 
-            None
-        )
-        self.checker_report.include(avg_report)
+        avg_create_query = get_table_if_exists(self.client, self.student_db, "avg_amount")
         
         if avg_create_query:
             mv_count += 1
@@ -917,13 +911,7 @@ class ClickHouseChecker(LabChecker):
             self.checker_report.include(avg_mv_report)
             
         # MV option 2: Important transactions
-        imp_report, imp_create_query = check_table_exists(
-            self.client,
-            self.student_db,
-            "important_transactions", 
-            None
-        )
-        self.checker_report.include(imp_report)
+        imp_create_query = get_table_if_exists(self.client, self.student_db, "important_transactions")
         
         if imp_create_query:
             mv_count += 1
@@ -937,13 +925,7 @@ class ClickHouseChecker(LabChecker):
             self.checker_report.include(imp_mv_report)
             
         # MV option 3: Sum by months
-        sum_report, sum_create_query = check_table_exists(
-            self.client,
-            self.student_db,
-            "sum_tot_month", 
-            "SummingMergeTree"
-        )
-        self.checker_report.include(sum_report)
+        sum_create_query = get_table_if_exists(self.client, self.student_db, "sum_tot_month")
         
         if sum_create_query:
             mv_count += 1
@@ -958,13 +940,7 @@ class ClickHouseChecker(LabChecker):
             self.checker_report.include(sum_mv_report)
             
         # MV option 4: Users saldos
-        saldo_report, saldo_create_query = check_table_exists(
-            self.client,
-            self.student_db,
-            "users_saldos", 
-            "SummingMergeTree"
-        )
-        self.checker_report.include(saldo_report)
+        saldo_create_query = get_table_if_exists(self.client, self.student_db, "users_saldos")
         
         if saldo_create_query:
             mv_count += 1
@@ -977,27 +953,6 @@ class ClickHouseChecker(LabChecker):
                 "users_saldos"
             )
             self.checker_report.include(saldo_mv_report)
-            
-        # Check for additional MVs with different naming conventions
-        query = f"""
-        SELECT name FROM system.tables 
-        WHERE database = '{self.student_db}' AND engine LIKE 'Materialized%'
-        """
-        
-        additional_mvs = execute_query(self.client, query)
-        if additional_mvs:
-            for mv_name in additional_mvs:
-                mv_name = mv_name[0]
-                # Skip MVs we've already checked
-                if mv_name not in ["avg_amount", "important_transactions", "sum_tot_month_mv", "users_saldos_mv", "income_aggregated", "outcome_aggregated"]:
-                    logger.info(f"Found additional materialized view: {mv_name}")
-                    additional_mv_report = check_materialized_view(
-                        self.client,
-                        self.student_db,
-                        mv_name
-                    )
-                    self.checker_report.include(additional_mv_report)
-                    mv_count += 1
             
         if mv_count < 2:
             error_msg = f"Found only {mv_count} materialized views. At least 2 are required."
@@ -1017,12 +972,9 @@ class ClickHouseChecker(LabChecker):
             "transactions_distributed",  # Base data table
         ]
         
-        # Add MV-related distributed tables if they exist
-        if get_table_if_exists(self.client, self.student_db, "transactions_aggregated_distributed"):
-            required_tables.append("transactions_aggregated_distributed")
-        
         # Check if any of the potential materialized view distributed tables exist
         potential_mv_tables = [
+            "transactions_aggregated_distributed",
             "avg_amount_distributed",
             "important_transactions_distributed",
             "sum_tot_month_distributed", 
