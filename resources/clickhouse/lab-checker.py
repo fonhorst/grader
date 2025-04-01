@@ -9,6 +9,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+# Configure logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 
 
@@ -309,7 +317,6 @@ class ClickHouseChecker:
     def execute_validation_queries(self):
         """Execute validation queries to check data correctness"""
         logger.info("=== Executing validation queries ===")
-        print("\n=== Executing validation queries ===")
         
         # Check if base transactions table has data
         count_query = f"SELECT count() FROM {self.student_db}.transactions"
@@ -440,7 +447,6 @@ class ClickHouseChecker:
     def check_data_distribution(self):
         """Check that data is properly distributed across all nodes in the cluster"""
         logger.info("=== Checking data distribution across cluster ===")
-        print("\n=== Checking data distribution across cluster ===")
         
         # Define the required distributed tables based on lab task
         required_tables = [
@@ -503,7 +509,6 @@ class ClickHouseChecker:
         # Check distribution for each required table
         for table_name in required_tables:
             logger.info(f"Checking distribution for table {table_name}...")
-            print(f"\nChecking distribution for table {table_name}...")
             
             # Query to check distribution using shardNum() function
             distribution_query = f"""
@@ -565,7 +570,6 @@ class ClickHouseChecker:
                 for shard, count in shard_rows:
                     percent = (count / total_rows) * 100
                     logger.info(f"  Shard {shard}: {count} rows ({percent:.2f}%)")
-                    print(f"  Shard {shard}: {count} rows ({percent:.2f}%)")
                 
                 # Calculate and check skew percentage
                 if min_rows > 0:
@@ -615,12 +619,7 @@ class ClickHouseChecker:
         logger.info(f"Database: {self.student_db}")
         logger.info(f"Cluster: {self.cluster_name}")
         
-        print(f"Starting checks for student: {self.student_username}")
-        print(f"Database: {self.student_db}")
-        print(f"Cluster: {self.cluster_name}")
-        
         logger.info("=== Checking base tables ===")
-        print("\n=== Checking base tables ===")
         # Check base tables
         base_tables_exist = self.check_table_exists("transactions", "MergeTree")
         if base_tables_exist:
@@ -628,19 +627,16 @@ class ClickHouseChecker:
             
         # Check distributed tables
         logger.info("=== Checking distributed tables ===")
-        print("\n=== Checking distributed tables ===")
         self.check_distributed_table("transactions_distributed", "transactions")
         
         # Check for MVs (at least 2 should exist)
         logger.info("=== Checking materialized views ===")
-        print("\n=== Checking materialized views ===")
         
         mv_count = 0
         
         # Check transactions_aggregated if it exists (helper table for MVs)
         if self.check_table_exists("transactions_aggregated", "AggregatingMergeTree"):
             logger.info("Found transactions_aggregated helper table")
-            print("✅ SUCCESS: Found transactions_aggregated helper table")
             self.check_distributed_table("transactions_aggregated_distributed", "transactions_aggregated")
             
             # Check helper MVs if they exist
@@ -651,7 +647,6 @@ class ClickHouseChecker:
         if self.check_table_exists("avg_amount", None):
             mv_count += 1
             logger.info("Found MV option 1: Average amounts")
-            print("✅ SUCCESS: Found MV option 1: Average amounts")
             # Check if this is an actual MV
             self.check_materialized_view("avg_amount")
             
@@ -659,7 +654,6 @@ class ClickHouseChecker:
         if self.check_table_exists("important_transactions", None):
             mv_count += 1
             logger.info("Found MV option 2: Important transactions")
-            print("✅ SUCCESS: Found MV option 2: Important transactions")
             # Check if this is an actual MV
             self.check_materialized_view("important_transactions")
             
@@ -667,7 +661,6 @@ class ClickHouseChecker:
         if self.check_table_exists("sum_tot_month", "SummingMergeTree"):
             mv_count += 1
             logger.info("Found MV option 3: Sum by months")
-            print("✅ SUCCESS: Found MV option 3: Sum by months")
             # Check if there's a MV writing to this table
             self.check_materialized_view("sum_tot_month_mv", "sum_tot_month")
             
@@ -675,7 +668,6 @@ class ClickHouseChecker:
         if self.check_table_exists("users_saldos", "SummingMergeTree"):
             mv_count += 1
             logger.info("Found MV option 4: Users saldos")
-            print("✅ SUCCESS: Found MV option 4: Users saldos")
             # Check if there's a MV writing to this table
             self.check_materialized_view("users_saldos_mv", "users_saldos")
             
@@ -691,9 +683,7 @@ class ClickHouseChecker:
                 mv_name = mv_name[0]
                 # Skip MVs we've already checked
                 if mv_name not in ["avg_amount", "important_transactions", "sum_tot_month_mv", "users_saldos_mv", "income_aggregated", "outcome_aggregated"]:
-                    success_msg = f"Found additional materialized view: {mv_name}"
-                    logger.info(success_msg)
-                    print(f"✅ SUCCESS: {success_msg}")
+                    logger.info(f"Found additional materialized view: {mv_name}")
                     self.check_materialized_view(mv_name)
                     mv_count += 1
             
@@ -712,25 +702,19 @@ class ClickHouseChecker:
         # Check data distribution across cluster nodes and check for data skew
         self.check_data_distribution()
         
-        # Print summary
+        # Summary
         logger.info("=== Summary ===")
-        print("\n=== Summary ===")
         
         errors = [check for check in self.checker_report.checks if not check.passed and check.required]
         
         if self.checker_report.has_success():
             logger.info("All checks passed!")
-            print("✅ All checks passed!")
         else:
             logger.error(f"{len(errors)} checks failed!")
-            print(f"❌ {len(errors)} checks failed!")
             
             logger.error("Errors:")
-            print("\nErrors:")
             for i, check in enumerate(errors, 1):
-                error_msg = f"{i}. {check.check_description}: {check.reason}"
-                logger.error(error_msg)
-                print(error_msg)
+                logger.error(f"{i}. {check.check_description}: {check.reason}")
                 
         return self.checker_report
 
@@ -741,8 +725,15 @@ def main():
     parser.add_argument('--student', required=True, help='Student username')
     parser.add_argument('--cluster-name', default='main_cluster', help='ClickHouse cluster name')
     parser.add_argument('--output-json', help='Path to save the checker report as JSON')
+    parser.add_argument('--log-file', help='Path to save logs')
     
     args = parser.parse_args()
+    
+    # Configure file logging if requested
+    if args.log_file:
+        file_handler = logging.FileHandler(args.log_file)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logger.addHandler(file_handler)
     
     # Get password securely
     password = input(f"Enter ClickHouse password for {args.user}: ")
@@ -761,7 +752,7 @@ def main():
     if args.output_json:
         with open(args.output_json, 'w') as f:
             f.write(report.json(indent=2))
-        print(f"Saved report to {args.output_json}")
+        logger.info(f"Saved report to {args.output_json}")
     
     sys.exit(0 if report.has_success() else 1)
 
