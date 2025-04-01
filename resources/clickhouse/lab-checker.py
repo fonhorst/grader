@@ -79,6 +79,31 @@ def execute_query(client: Client, query: str) -> Optional[List[Tuple]]:
         return None
 
 
+def get_table_if_exists(client: Client, db_name: str, table_name: str) -> Optional[str]:
+    """Get the table if it exists
+    
+    Args:
+        client: Clickhouse client
+        db_name: Database name
+        table_name: Table name
+    
+    Returns:
+        Create query of the table if it exists, None otherwise
+    """
+    query = f"""
+    SELECT create_table_query 
+    FROM system.tables 
+    WHERE database = '{db_name}' AND name = '{table_name}'
+    """
+    
+    result = execute_query(client, query)
+    
+    if not result:
+        return None
+        
+    return result[0][0]
+
+
 def check_table_exists(client: Client, db_name: str, table_name: str, expected_engine: Optional[str] = None) -> Tuple[CheckerReport, Optional[str]]:
     """Check if a table exists and has the expected engine
     
@@ -222,7 +247,7 @@ def check_distributed_table(client: Client, db_name: str, table_name: str, expec
     """
     checker_report = CheckerReport()
     
-    success, table_report, create_query = check_table_exists(
+    table_report, create_query = check_table_exists(
         client=client,
         db_name=db_name,
         table_name=table_name,
