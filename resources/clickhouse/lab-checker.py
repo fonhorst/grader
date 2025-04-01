@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from abc import ABC, abstractmethod
 import logging
 import sys
 import argparse
@@ -26,9 +27,9 @@ class CheckReport(BaseModel):
     passed: bool
     check_description: str
     reason: Optional[str] = None
+    check_group: Optional[str] = None
 
-# TODO: add groups to the report
-# TODO: add a report generation in a Markdown format
+
 class CheckerReport(BaseModel):
     """Structured log of checking"""
     checks: List[CheckReport] = []
@@ -41,14 +42,14 @@ class CheckerReport(BaseModel):
         """Check if any checks are failed"""
         return any(not check.passed for check in self.checks if not check.required)
 
-    def success(self, description: str, required: bool = True):
+    def success(self, description: str, required: bool = True, check_group: Optional[str] = None):
         """Add a success check report to the checker report"""
-        self.checks.append(CheckReport(required=required, passed=True, check_description=description))
+        self.checks.append(CheckReport(required=required, passed=True, check_description=description, check_group=check_group))
         return self
 
-    def fail(self, description: str, reason: str, required: bool = True):
+    def fail(self, description: str, reason: str, required: bool = True, check_group: Optional[str] = None):
         """Add an error check report to the checker report"""
-        self.checks.append(CheckReport(required=required, passed=False, check_description=description, reason=reason))
+        self.checks.append(CheckReport(required=required, passed=False, check_description=description, reason=reason, check_group=check_group))
         return self
 
     def add(self, other: 'CheckReport'):
@@ -56,10 +57,84 @@ class CheckerReport(BaseModel):
         self.checks.append(other)
         return self
 
-    def include(self, other: 'CheckerReport'):
+    def include(self, other: 'CheckerReport', check_group: Optional[str] = None):
         """Include another checker report into this one"""
-        self.checks.extend(other.checks)
+        if check_group:
+            self.checks.extend((check.copy(update={"check_group": check_group}) for check in other.checks))
+        else:
+            self.checks.extend(other.checks)
         return self
+        
+    def to_markdown(self) -> str:
+        """Generate a Markdown report from the checker results
+        
+        Returns:
+            str: Markdown formatted report
+        """
+        # Group checks by pass/fail and required/optional
+        required_passed = []
+        required_failed = []
+        optional_passed = []
+        optional_failed = []
+        
+        for check in self.checks:
+            if check.required and check.passed:
+                required_passed.append(check)
+            elif check.required and not check.passed:
+                required_failed.append(check)
+            elif not check.required and check.passed:
+                optional_passed.append(check)
+            else:  # not required and not passed
+                optional_failed.append(check)
+        
+        # Generate markdown report
+        md = []
+        md.append("# ClickHouse Lab Checker Report\n")
+        
+        # Summary section
+        md.append("## Summary\n")
+        overall_status = "✅ **PASSED**" if self.has_success() else "❌ **FAILED**"
+        md.append(f"**Overall Status:** {overall_status}\n")
+        
+        total_checks = len(self.checks)
+        required_checks = len([c for c in self.checks if c.required])
+        passed_required = len(required_passed)
+        
+        md.append(f"**Required Checks:** {passed_required}/{required_checks} passed\n")
+        
+        if optional_passed or optional_failed:
+            optional_checks = len([c for c in self.checks if not c.required])
+            passed_optional = len(optional_passed)
+            md.append(f"**Optional Checks:** {passed_optional}/{optional_checks} passed\n")
+        
+        # Required failures (most critical information)
+        if required_failed:
+            md.append("\n## Required Checks That Failed\n")
+            for i, check in enumerate(required_failed, 1):
+                md.append(f"### {i}. {check.check_description}\n")
+                md.append(f"**Reason:** {check.reason}\n")
+        
+        # Required successes
+        if required_passed:
+            md.append("\n## Required Checks That Passed\n")
+            for check in required_passed:
+                md.append(f"- {check.check_description}\n")
+        
+        # Optional failures
+        if optional_failed:
+            md.append("\n## Optional Checks That Failed\n")
+            for i, check in enumerate(optional_failed, 1):
+                md.append(f"### {i}. {check.check_description}\n")
+                md.append(f"**Reason:** {check.reason}\n")
+        
+        # Optional successes
+        if optional_passed:
+            md.append("\n## Optional Checks That Passed\n")
+            for check in optional_passed:
+                md.append(f"- {check.check_description}\n")
+        
+        # Join all markdown sections with newlines
+        return "".join(md)
 
 
 def execute_query(client: Client, query: str) -> Optional[List[Tuple]]:
@@ -76,7 +151,7 @@ def execute_query(client: Client, query: str) -> Optional[List[Tuple]]:
         return client.execute(query)
     except Exception as e:
         logger.error(f"Query execution failed: {query}\nError: {str(e)}")
-        return None
+        raise e
 
 
 def get_table_if_exists(client: Client, db_name: str, table_name: str) -> Optional[str]:
@@ -243,19 +318,36 @@ def check_distributed_table(client: Client, db_name: str, table_name: str, expec
         cluster_name: Expected cluster name
         
     Returns:
-        Tuple of (success, report)
+        CheckerReport containing check results
     """
     checker_report = CheckerReport()
     
-    table_report, create_query = check_table_exists(
-        client=client,
-        db_name=db_name,
-        table_name=table_name,
-        expected_engine="Distributed"
-    )
-    checker_report.include(table_report)
+    create_query = get_table_if_exists(client, db_name, table_name)
     
-    if not success or not create_query:
+    if not create_query:
+        error_msg = f"Table {db_name}.{table_name} does not exist"
+        logger.error(error_msg)
+        checker_report.fail(
+            description=f"Check if table {table_name} exists",
+            reason=error_msg,
+            required=True
+        )
+        return checker_report
+    
+    # Check if it's a distributed table
+    query = f"""
+    SELECT engine FROM system.tables 
+    WHERE database = '{db_name}' AND name = '{table_name}'
+    """
+    result = execute_query(client, query)
+    if not result or not result[0][0].startswith("Distributed"):
+        error_msg = f"Table {db_name}.{table_name} is not a Distributed table"
+        logger.error(error_msg)
+        checker_report.fail(
+            description=f"Check if table {table_name} has engine Distributed",
+            reason=error_msg,
+            required=True
+        )
         return checker_report
         
     # Check cluster name
@@ -300,6 +392,7 @@ def check_distributed_table(client: Client, db_name: str, table_name: str, expec
     return checker_report
 
 
+# TODO: check if the logic of checking is correct
 def check_materialized_view(client: Client, db_name: str, mv_name: str, expected_to_table: Optional[str] = None) -> CheckerReport:
     """Check materialized view configuration
     
@@ -574,7 +667,13 @@ def check_data_distribution(client: Client, db_name: str, required_tables: List[
     return checker_report
 
 
-class ClickHouseChecker:
+class LabChecker(ABC):
+    @abstractmethod
+    def run_checks(self) -> CheckerReport:
+        ...
+
+
+class ClickHouseChecker(LabChecker):
     def __init__(self, host='localhost', user='admin', password=None, student_username=None, cluster_name='main_cluster'):
         self.client = Client(host=host, user=user, password=password)
         self.cluster_name = cluster_name
@@ -631,8 +730,7 @@ class ClickHouseChecker:
         # Check MV results if they exist
         
         # Check avg amount (MV option 1)
-        table_report, create_query = check_table_exists(self.client, self.student_db, "avg_amount", None)
-        self.checker_report.include(table_report)
+        create_query = get_table_if_exists(self.client, self.student_db, "avg_amount")
         if create_query:
             avg_query = f"SELECT * FROM {self.student_db}.avg_amount WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             avg_result = execute_query(self.client, avg_query)
@@ -653,8 +751,7 @@ class ClickHouseChecker:
                 )
             
         # Check important transactions (MV option 2)
-        table_report, create_query = check_table_exists(self.client, self.student_db, "important_transactions", None)
-        self.checker_report.include(table_report)
+        create_query = get_table_if_exists(self.client, self.student_db, "important_transactions")
         if create_query:
             important_query = f"SELECT * FROM {self.student_db}.important_transactions WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             important_result = execute_query(self.client, important_query)
@@ -675,8 +772,7 @@ class ClickHouseChecker:
                 )
                 
         # Check transaction sums (MV option 3)
-        table_report, create_query = check_table_exists(self.client, self.student_db, "sum_tot_month", None)
-        self.checker_report.include(table_report)
+        create_query = get_table_if_exists(self.client, self.student_db, "sum_tot_month")
         if create_query:
             sum_query = f"SELECT * FROM {self.student_db}.sum_tot_month WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             sum_result = execute_query(self.client, sum_query)
@@ -697,8 +793,7 @@ class ClickHouseChecker:
                 )
                 
         # Check user saldos (MV option 4)
-        table_report, create_query = check_table_exists(self.client, self.student_db, "users_saldos", None)
-        self.checker_report.include(table_report)
+        create_query = get_table_if_exists(self.client, self.student_db, "users_saldos")
         if create_query:
             saldo_query = f"SELECT * FROM {self.student_db}.users_saldos WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             saldo_result = execute_query(self.client, saldo_query)
@@ -923,13 +1018,7 @@ class ClickHouseChecker:
         ]
         
         # Add MV-related distributed tables if they exist
-        aggregated_dist_report, aggregated_dist_create_query = check_table_exists(
-            self.client,
-            self.student_db,
-            "transactions_aggregated_distributed", 
-            "Distributed"
-        )
-        if aggregated_dist_create_query:
+        if get_table_if_exists(self.client, self.student_db, "transactions_aggregated_distributed"):
             required_tables.append("transactions_aggregated_distributed")
         
         # Check if any of the potential materialized view distributed tables exist
@@ -941,13 +1030,7 @@ class ClickHouseChecker:
         ]
         
         for table in potential_mv_tables:
-            table_report, table_create_query = check_table_exists(
-                self.client,
-                self.student_db,
-                table, 
-                "Distributed"
-            )
-            if table_create_query:
+            if get_table_if_exists(self.client, self.student_db, table):
                 required_tables.append(table)
         
         distribution_report = check_data_distribution(
@@ -974,6 +1057,7 @@ class ClickHouseChecker:
                 
         return self.checker_report
 
+
 def main():
     parser = argparse.ArgumentParser(description='Check ClickHouse lab implementation')
     parser.add_argument('--host', default='localhost', help='ClickHouse host address')
@@ -981,6 +1065,7 @@ def main():
     parser.add_argument('--student', required=True, help='Student username')
     parser.add_argument('--cluster-name', default='main_cluster', help='ClickHouse cluster name')
     parser.add_argument('--output-json', help='Path to save the checker report as JSON')
+    parser.add_argument('--output-markdown', help='Path to save the checker report as Markdown')
     parser.add_argument('--log-file', help='Path to save logs')
     
     args = parser.parse_args()
@@ -1008,7 +1093,14 @@ def main():
     if args.output_json:
         with open(args.output_json, 'w') as f:
             f.write(report.json(indent=2))
-        logger.info(f"Saved report to {args.output_json}")
+        logger.info(f"Saved JSON report to {args.output_json}")
+    
+    # Save report as Markdown if requested
+    if args.output_markdown:
+        markdown_report = report.to_markdown()
+        with open(args.output_markdown, 'w') as f:
+            f.write(markdown_report)
+        logger.info(f"Saved Markdown report to {args.output_markdown}")
     
     sys.exit(0 if report.has_success() else 1)
 
