@@ -4,6 +4,19 @@ import argparse
 from clickhouse_driver import Client
 import pandas as pd
 import re
+from typing import List, Optional
+from pydantic import BaseModel
+
+class CheckReport(BaseModel):
+    """Represents a result of an individual check"""
+    required: bool
+    passed: bool
+    check_description: str
+    error: Optional[str] = None
+
+class CheckerReport(BaseModel):
+    """Structured log of checking"""
+    checks: List[CheckReport]
 
 class ClickHouseChecker:
     def __init__(self, host='localhost', user='admin', password=None, student_username=None, cluster_name='main_cluster'):
@@ -13,6 +26,25 @@ class ClickHouseChecker:
         self.student_db = f"{student_username}_db" if student_username else None
         self.all_checks_passed = True
         self.errors = []
+        self.checker_report = CheckerReport(checks=[])
+        
+    def add_check_report(self, required: bool, passed: bool, check_description: str, error: str = None):
+        """Add a check report to the checker report"""
+        check = CheckReport(
+            required=required,
+            passed=passed,
+            check_description=check_description,
+            error=error
+        )
+        self.checker_report.checks.append(check)
+        
+        if required and not passed:
+            self.all_checks_passed = False
+            
+        if passed:
+            self.log_success(check_description)
+        else:
+            self.log_error(f"{check_description}: {error}")
         
     def log_error(self, message):
         """Log an error message and mark the checks as failed"""
@@ -35,7 +67,13 @@ class ClickHouseChecker:
     def check_table_exists(self, table_name, expected_engine=None):
         """Check if a table exists and has the expected engine"""
         if not self.student_db:
-            self.log_error("Student username not provided. Cannot check tables.")
+            error_msg = "Student username not provided. Cannot check tables."
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check if table {table_name} exists",
+                error=error_msg
+            )
             return False
             
         query = f"""
@@ -47,22 +85,44 @@ class ClickHouseChecker:
         result = self.execute_query(query)
         
         if not result:
-            self.log_error(f"Table {self.student_db}.{table_name} does not exist")
+            error_msg = f"Table {self.student_db}.{table_name} does not exist"
+            self.add_check_report(
+                required=expected_engine is not None,
+                passed=False,
+                check_description=f"Check if table {table_name} exists",
+                error=error_msg
+            )
             return False
             
         engine, create_query = result[0]
         
         if expected_engine and not engine.startswith(expected_engine):
-            self.log_error(f"Table {self.student_db}.{table_name} has engine {engine}, expected {expected_engine}")
+            error_msg = f"Table {self.student_db}.{table_name} has engine {engine}, expected {expected_engine}"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check if table {table_name} has engine {expected_engine}",
+                error=error_msg
+            )
             return False
             
-        self.log_success(f"Table {self.student_db}.{table_name} exists with engine {engine}")
+        self.add_check_report(
+            required=expected_engine is not None,
+            passed=True,
+            check_description=f"Table {self.student_db}.{table_name} exists with engine {engine}"
+        )
         return create_query
         
     def check_table_schema(self, table_name, expected_columns):
         """Check if a table has the expected columns"""
         if not self.student_db:
-            self.log_error("Student username not provided. Cannot check table schema.")
+            error_msg = "Student username not provided. Cannot check table schema."
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check schema of table {table_name}",
+                error=error_msg
+            )
             return False
             
         query = f"""
@@ -74,7 +134,13 @@ class ClickHouseChecker:
         columns = self.execute_query(query)
         
         if not columns:
-            self.log_error(f"Could not retrieve columns for {self.student_db}.{table_name}")
+            error_msg = f"Could not retrieve columns for {self.student_db}.{table_name}"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check schema of table {table_name}",
+                error=error_msg
+            )
             return False
             
         column_dict = {name: type_ for name, type_ in columns}
@@ -82,10 +148,20 @@ class ClickHouseChecker:
         missing_columns = [col for col in expected_columns if col not in column_dict]
         
         if missing_columns:
-            self.log_error(f"Table {self.student_db}.{table_name} is missing columns: {missing_columns}")
+            error_msg = f"Table {self.student_db}.{table_name} is missing columns: {missing_columns}"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check required columns in table {table_name}",
+                error=error_msg
+            )
             return False
             
-        self.log_success(f"Table {self.student_db}.{table_name} has all required columns")
+        self.add_check_report(
+            required=True,
+            passed=True,
+            check_description=f"Table {self.student_db}.{table_name} has all required columns"
+        )
         return True
         
     def check_distributed_table(self, table_name, expected_base_table):
@@ -97,20 +173,42 @@ class ClickHouseChecker:
             
         # Check cluster name
         if self.cluster_name not in create_query:
-            self.log_error(f"Distributed table {self.student_db}.{table_name} doesn't use cluster {self.cluster_name}")
+            error_msg = f"Distributed table {self.student_db}.{table_name} doesn't use cluster {self.cluster_name}"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check if table {table_name} uses correct cluster",
+                error=error_msg
+            )
             return False
             
         # Check base table
         if expected_base_table not in create_query:
-            self.log_error(f"Distributed table {self.student_db}.{table_name} doesn't use {expected_base_table} as base table")
+            error_msg = f"Distributed table {self.student_db}.{table_name} doesn't use {expected_base_table} as base table"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check if table {table_name} uses correct base table",
+                error=error_msg
+            )
             return False
             
         # Check if sharding key is specified
         if "xxHash64" not in create_query and "rand()" not in create_query.lower():
-            self.log_error(f"Distributed table {self.student_db}.{table_name} doesn't have a proper sharding expression")
+            error_msg = f"Distributed table {self.student_db}.{table_name} doesn't have a proper sharding expression"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description=f"Check if table {table_name} has a sharding expression",
+                error=error_msg
+            )
             return False
             
-        self.log_success(f"Distributed table {self.student_db}.{table_name} is configured correctly")
+        self.add_check_report(
+            required=True,
+            passed=True,
+            check_description=f"Distributed table {self.student_db}.{table_name} is configured correctly"
+        )
         return True
         
     def check_materialized_view(self, mv_name, expected_to_table=None):
@@ -123,21 +221,46 @@ class ClickHouseChecker:
         
         result = self.execute_query(query)
         
+        required = expected_to_table is not None
+        
         if not result:
-            self.log_error(f"Materialized view {self.student_db}.{mv_name} does not exist")
+            if required:
+                error_msg = f"Materialized view {self.student_db}.{mv_name} does not exist"
+                self.add_check_report(
+                    required=required,
+                    passed=False,
+                    check_description=f"Check if materialized view {mv_name} exists",
+                    error=error_msg
+                )
             return False
             
         engine, create_query = result[0]
         
         if not engine.startswith("Materialized"):
-            self.log_error(f"{self.student_db}.{mv_name} is not a materialized view")
+            error_msg = f"{self.student_db}.{mv_name} is not a materialized view"
+            self.add_check_report(
+                required=required,
+                passed=False,
+                check_description=f"Check if {mv_name} is a materialized view",
+                error=error_msg
+            )
             return False
             
         if expected_to_table and f"TO {self.student_db}.{expected_to_table}" not in create_query:
-            self.log_error(f"Materialized view {self.student_db}.{mv_name} doesn't write to {expected_to_table}")
+            error_msg = f"Materialized view {self.student_db}.{mv_name} doesn't write to {expected_to_table}"
+            self.add_check_report(
+                required=required,
+                passed=False,
+                check_description=f"Check if materialized view {mv_name} writes to {expected_to_table}",
+                error=error_msg
+            )
             return False
             
-        self.log_success(f"Materialized view {self.student_db}.{mv_name} is configured correctly")
+        self.add_check_report(
+            required=required,
+            passed=True,
+            check_description=f"Materialized view {self.student_db}.{mv_name} is configured correctly"
+        )
         return True
         
     def check_view(self, view_name):
@@ -151,16 +274,32 @@ class ClickHouseChecker:
         result = self.execute_query(query)
         
         if not result:
-            self.log_error(f"View {self.student_db}.{view_name} does not exist")
+            error_msg = f"View {self.student_db}.{view_name} does not exist"
+            self.add_check_report(
+                required=False,
+                passed=False,
+                check_description=f"Check if view {view_name} exists",
+                error=error_msg
+            )
             return False
             
         engine, create_query = result[0]
         
         if not engine == "View":
-            self.log_error(f"{self.student_db}.{view_name} is not a view")
+            error_msg = f"{self.student_db}.{view_name} is not a view"
+            self.add_check_report(
+                required=False,
+                passed=False,
+                check_description=f"Check if {view_name} is a view",
+                error=error_msg
+            )
             return False
             
-        self.log_success(f"View {self.student_db}.{view_name} is configured correctly")
+        self.add_check_report(
+            required=False,
+            passed=True,
+            check_description=f"View {self.student_db}.{view_name} is configured correctly"
+        )
         return True
         
     def execute_validation_queries(self):
@@ -172,20 +311,40 @@ class ClickHouseChecker:
         count_result = self.execute_query(count_query)
         
         if not count_result or count_result[0][0] == 0:
-            self.log_error(f"No data found in {self.student_db}.transactions")
+            error_msg = f"No data found in {self.student_db}.transactions"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description="Check if transactions table has data",
+                error=error_msg
+            )
             return False
         else:
-            self.log_success(f"Found {count_result[0][0]} records in {self.student_db}.transactions")
+            self.add_check_report(
+                required=True,
+                passed=True,
+                check_description=f"Found {count_result[0][0]} records in {self.student_db}.transactions"
+            )
             
         # Check if distributed table works
         dist_query = f"SELECT count() FROM {self.student_db}.transactions_distributed"
         dist_result = self.execute_query(dist_query)
         
         if not dist_result:
-            self.log_error(f"Could not query {self.student_db}.transactions_distributed")
+            error_msg = f"Could not query {self.student_db}.transactions_distributed"
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description="Check if distributed table is queryable",
+                error=error_msg
+            )
             return False
         else:
-            self.log_success(f"Successfully queried distributed table")
+            self.add_check_report(
+                required=True,
+                passed=True,
+                check_description="Successfully queried distributed table"
+            )
             
         # Check MV results if they exist
         
@@ -194,28 +353,72 @@ class ClickHouseChecker:
             avg_query = f"SELECT * FROM {self.student_db}.avg_amount WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             avg_result = self.execute_query(avg_query)
             if avg_result:
-                self.log_success(f"Successfully queried avg_amount materialized view")
+                self.add_check_report(
+                    required=False,
+                    passed=True,
+                    check_description="Successfully queried avg_amount materialized view"
+                )
+            else:
+                self.add_check_report(
+                    required=False,
+                    passed=False,
+                    check_description="Check if avg_amount materialized view is queryable",
+                    error="Could not query avg_amount view"
+                )
             
         # Check important transactions (MV option 2)
         if self.check_table_exists("important_transactions", None):
             important_query = f"SELECT * FROM {self.student_db}.important_transactions WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             important_result = self.execute_query(important_query)
             if important_result:
-                self.log_success(f"Successfully queried important_transactions materialized view")
+                self.add_check_report(
+                    required=False,
+                    passed=True,
+                    check_description="Successfully queried important_transactions materialized view"
+                )
+            else:
+                self.add_check_report(
+                    required=False,
+                    passed=False,
+                    check_description="Check if important_transactions materialized view is queryable",
+                    error="Could not query important_transactions view"
+                )
                 
         # Check transaction sums (MV option 3)
         if self.check_table_exists("sum_tot_month", None):
             sum_query = f"SELECT * FROM {self.student_db}.sum_tot_month WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             sum_result = self.execute_query(sum_query)
             if sum_result:
-                self.log_success(f"Successfully queried sum_tot_month materialized view")
+                self.add_check_report(
+                    required=False,
+                    passed=True,
+                    check_description="Successfully queried sum_tot_month materialized view"
+                )
+            else:
+                self.add_check_report(
+                    required=False,
+                    passed=False,
+                    check_description="Check if sum_tot_month materialized view is queryable",
+                    error="Could not query sum_tot_month view"
+                )
                 
         # Check user saldos (MV option 4)
         if self.check_table_exists("users_saldos", None):
             saldo_query = f"SELECT * FROM {self.student_db}.users_saldos WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
             saldo_result = self.execute_query(saldo_query)
             if saldo_result:
-                self.log_success(f"Successfully queried users_saldos materialized view")
+                self.add_check_report(
+                    required=False,
+                    passed=True,
+                    check_description="Successfully queried users_saldos materialized view"
+                )
+            else:
+                self.add_check_report(
+                    required=False,
+                    passed=False,
+                    check_description="Check if users_saldos materialized view is queryable",
+                    error="Could not query users_saldos view"
+                )
                 
         return True
     
@@ -245,7 +448,12 @@ class ClickHouseChecker:
                 required_tables.append(table)
         
         if not required_tables:
-            self.log_error("No required distributed tables found to check data distribution")
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description="Check if required distributed tables exist",
+                error="No required distributed tables found to check data distribution"
+            )
             return False
             
         # Get information about cluster shards
@@ -258,11 +466,20 @@ class ClickHouseChecker:
         
         shards = self.execute_query(shard_query)
         if not shards:
-            self.log_error(f"Could not retrieve shard information for cluster {self.cluster_name}")
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description="Check cluster configuration",
+                error=f"Could not retrieve shard information for cluster {self.cluster_name}"
+            )
             return False
             
         shard_count = len(shards)
-        self.log_success(f"Found {shard_count} shards in cluster {self.cluster_name}")
+        self.add_check_report(
+            required=True,
+            passed=True,
+            check_description=f"Found {shard_count} shards in cluster {self.cluster_name}"
+        )
         
         # Check distribution for each required table
         for table_name in required_tables:
@@ -281,7 +498,12 @@ class ClickHouseChecker:
                 result = self.execute_query(distribution_query)
                 
                 if not result:
-                    self.log_error(f"Could not check distribution for table {table_name}")
+                    self.add_check_report(
+                        required=True,
+                        passed=False,
+                        check_description=f"Check data distribution for table {table_name}",
+                        error=f"Could not check distribution for table {table_name}"
+                    )
                     continue
                     
                 # Process the results
@@ -295,12 +517,22 @@ class ClickHouseChecker:
                 
                 # Check if data exists on all shards
                 if len(shard_rows) < shard_count:
-                    self.log_error(f"Table {table_name} data not found on all shards. Found on {len(shard_rows)}/{shard_count} shards.")
+                    self.add_check_report(
+                        required=True,
+                        passed=False,
+                        check_description=f"Check if data exists on all shards for table {table_name}",
+                        error=f"Data not found on all shards. Found on {len(shard_rows)}/{shard_count} shards."
+                    )
                     continue
                 
                 # Skip skew check for small tables
                 if total_rows < 100:
-                    self.log_success(f"Table {table_name} has too few rows ({total_rows}) to check for skew")
+                    self.add_check_report(
+                        required=False,
+                        passed=True,
+                        check_description=f"Check data skew for table {table_name}",
+                        error=f"Table has too few rows ({total_rows}) to check for skew"
+                    )
                     continue
                 
                 # Calculate min and max rows to check for skew
@@ -317,74 +549,41 @@ class ClickHouseChecker:
                     skew_percentage = ((max_rows - min_rows) / min_rows) * 100
                     
                     if skew_percentage > 20:
-                        self.log_error(f"Table {table_name} has significant data skew: {skew_percentage:.2f}% (min: {min_rows}, max: {max_rows})")
+                        self.add_check_report(
+                            required=True,
+                            passed=False,
+                            check_description=f"Check data skew for table {table_name}",
+                            error=f"Significant data skew: {skew_percentage:.2f}% (min: {min_rows}, max: {max_rows})"
+                        )
                     else:
-                        self.log_success(f"Table {table_name} has acceptable data distribution with {skew_percentage:.2f}% skew")
+                        self.add_check_report(
+                            required=True,
+                            passed=True,
+                            check_description=f"Check data skew for table {table_name}"
+                        )
                 else:
-                    self.log_error(f"Table {table_name} has empty shards (min: {min_rows}, max: {max_rows})")
+                    self.add_check_report(
+                        required=True,
+                        passed=False,
+                        check_description=f"Check data distribution for table {table_name}",
+                        error=f"Table has empty shards (min: {min_rows}, max: {max_rows})"
+                    )
                 
             except Exception as e:
-                self.log_error(f"Error checking distribution for table {table_name}: {str(e)}")
+                self.add_check_report(
+                    required=True,
+                    passed=False,
+                    check_description=f"Check data distribution for table {table_name}",
+                    error=f"Error checking distribution: {str(e)}"
+                )
                 
         return True
-    
-    def get_local_table_name(self, distributed_table):
-        """Extract the local table name from a distributed table"""
-        query = f"""
-        SELECT create_table_query
-        FROM system.tables
-        WHERE database = '{self.student_db}' AND name = '{distributed_table}'
-        """
-        
-        result = self.execute_query(query)
-        if not result:
-            return None
-            
-        create_query = result[0][0]
-        
-        # Try to extract the local table name from the Distributed engine definition
-        # Example: ENGINE = Distributed(cluster_name, database, table, sharding_key)
-        import re
-        match = re.search(r'Distributed\s*\(\s*[^,]+\s*,\s*[^,]+\s*,\s*([^,\s]+)', create_query)
-        if match:
-            return match.group(1)
-        else:
-            self.log_error(f"Could not extract local table name from distributed table {distributed_table}")
-            return distributed_table.replace('_distributed', '')  # Fallback to common naming pattern
-    
-    def check_data_skew(self, table_name, shard_rows):
-        """Check if there's significant skew in the data distribution"""
-        if not shard_rows:
-            return
-            
-        # Calculate min, max, and total rows
-        min_rows = min(count for _, count in shard_rows)
-        max_rows = max(count for _, count in shard_rows)
-        total_rows = sum(count for _, count in shard_rows)
-        
-        # Skip check if table is nearly empty
-        if total_rows < 100:
-            self.log_success(f"Table {table_name} has too few rows ({total_rows}) to check for skew")
-            return
-            
-        # Calculate skew percentage
-        if min_rows > 0:
-            skew_percentage = ((max_rows - min_rows) / min_rows) * 100
-            
-            # Print distribution information
-            for shard_num, count in shard_rows:
-                percent = (count / total_rows) * 100
-                print(f"  Shard {shard_num}: {count} rows ({percent:.2f}%)")
-                
-            if skew_percentage > 20:
-                self.log_error(f"Table {table_name} has significant data skew: {skew_percentage:.2f}% (min: {min_rows}, max: {max_rows})")
-            else:
-                self.log_success(f"Table {table_name} has acceptable data distribution with {skew_percentage:.2f}% skew")
-        else:
-            self.log_error(f"Table {table_name} has empty shards (min: {min_rows}, max: {max_rows})")
 
     def run_checks(self):
         """Run all checks for the ClickHouse lab implementation"""
+        # Create a fresh report
+        self.checker_report = CheckerReport(checks=[])
+        
         print(f"Starting checks for student: {self.student_username}")
         print(f"Database: {self.student_db}")
         print(f"Cluster: {self.cluster_name}")
@@ -458,7 +657,12 @@ class ClickHouseChecker:
                     mv_count += 1
             
         if mv_count < 2:
-            self.log_error(f"Found only {mv_count} materialized views. At least 2 are required.")
+            self.add_check_report(
+                required=True,
+                passed=False,
+                check_description="Check if at least 2 materialized views are implemented",
+                error=f"Found only {mv_count} materialized views. At least 2 are required."
+            )
             
         # Validate data by querying
         self.execute_validation_queries()
@@ -476,7 +680,7 @@ class ClickHouseChecker:
             for i, error in enumerate(self.errors, 1):
                 print(f"{i}. {error}")
                 
-        return self.all_checks_passed
+        return self.checker_report
 
 def main():
     parser = argparse.ArgumentParser(description='Check ClickHouse lab implementation')
@@ -484,6 +688,7 @@ def main():
     parser.add_argument('--user', default='admin', help='Admin username')
     parser.add_argument('--student', required=True, help='Student username')
     parser.add_argument('--cluster-name', default='main_cluster', help='ClickHouse cluster name')
+    parser.add_argument('--output-json', help='Path to save the checker report as JSON')
     
     args = parser.parse_args()
     
@@ -498,8 +703,15 @@ def main():
         cluster_name=args.cluster_name
     )
     
-    success = checker.run_checks()
-    sys.exit(0 if success else 1)
+    report = checker.run_checks()
+    
+    # Save report as JSON if requested
+    if args.output_json:
+        with open(args.output_json, 'w') as f:
+            f.write(report.json(indent=2))
+        print(f"Saved report to {args.output_json}")
+    
+    sys.exit(0 if checker.all_checks_passed else 1)
 
 if __name__ == "__main__":
     main() 
