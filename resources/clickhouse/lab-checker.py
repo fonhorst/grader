@@ -218,7 +218,160 @@ class ClickHouseChecker:
                 self.log_success(f"Successfully queried users_saldos materialized view")
                 
         return True
+    
+    def check_data_distribution(self):
+        """Check that data is properly distributed across all nodes in the cluster"""
+        print("\n=== Checking data distribution across cluster ===")
+        
+        # Get all distributed tables in the student's database
+        query = f"""
+        SELECT name 
+        FROM system.tables 
+        WHERE database = '{self.student_db}' AND engine = 'Distributed'
+        """
+        
+        tables = self.execute_query(query)
+        if not tables:
+            self.log_error("No distributed tables found to check data distribution")
+            return False
+            
+        # Get information about cluster shards
+        shard_query = f"""
+        SELECT shard_num, host_name
+        FROM system.clusters
+        WHERE cluster = '{self.cluster_name}'
+        ORDER BY shard_num
+        """
+        
+        shards = self.execute_query(shard_query)
+        if not shards:
+            self.log_error(f"Could not retrieve shard information for cluster {self.cluster_name}")
+            return False
+            
+        shard_count = len(shards)
+        self.log_success(f"Found {shard_count} shards in cluster {self.cluster_name}")
+        
+        # Check distribution for each table
+        for table_name, in tables:
+            # Extract the local table name from the distributed table
+            local_table = self.get_local_table_name(table_name)
+            if not local_table:
+                continue
                 
+            print(f"\nChecking distribution for table {table_name}...")
+            
+            # Check if data exists on all shards
+            shard_data_exists = True
+            shard_rows = []
+            
+            for shard_num, _ in shards:
+                # Query count from each shard
+                shard_query = f"""
+                SELECT count()
+                FROM {self.student_db}.{local_table}
+                WHERE _shard_num = {shard_num}
+                """
+                
+                try:
+                    # Try first with _shard_num
+                    result = self.execute_query(shard_query)
+                    if result:
+                        row_count = result[0][0]
+                        shard_rows.append((shard_num, row_count))
+                except Exception:
+                    # If _shard_num doesn't work, try a different approach with remote function
+                    shard_query = f"""
+                    SELECT count()
+                    FROM remote('{self.cluster_name}', '{self.student_db}', '{local_table}', '{self.client.user}', '{self.client.password}')
+                    WHERE _shard_num = {shard_num}
+                    """
+                    try:
+                        result = self.execute_query(shard_query)
+                        if result:
+                            row_count = result[0][0]
+                            shard_rows.append((shard_num, row_count))
+                    except Exception:
+                        # Try one more approach without filtering by _shard_num
+                        shard_query = f"""
+                        SELECT hostName(), count()
+                        FROM clusterAllReplicas('{self.cluster_name}', '{self.student_db}.{local_table}')
+                        GROUP BY hostName()
+                        """
+                        result = self.execute_query(shard_query)
+                        if result:
+                            for hostname, row_count in result:
+                                # Find the shard number for this hostname
+                                for shard_num, host_name in shards:
+                                    if host_name in hostname:
+                                        shard_rows.append((shard_num, row_count))
+                                        break
+            
+            # Check if we got data from all shards
+            if len(shard_rows) < shard_count:
+                self.log_error(f"Table {table_name} data not found on all shards. Found on {len(shard_rows)}/{shard_count} shards.")
+                shard_data_exists = False
+            
+            # Only check for skew if data exists on all shards
+            if shard_data_exists and shard_rows:
+                self.check_data_skew(table_name, shard_rows)
+                
+        return True
+    
+    def get_local_table_name(self, distributed_table):
+        """Extract the local table name from a distributed table"""
+        query = f"""
+        SELECT create_table_query
+        FROM system.tables
+        WHERE database = '{self.student_db}' AND name = '{distributed_table}'
+        """
+        
+        result = self.execute_query(query)
+        if not result:
+            return None
+            
+        create_query = result[0][0]
+        
+        # Try to extract the local table name from the Distributed engine definition
+        # Example: ENGINE = Distributed(cluster_name, database, table, sharding_key)
+        import re
+        match = re.search(r'Distributed\s*\(\s*[^,]+\s*,\s*[^,]+\s*,\s*([^,\s]+)', create_query)
+        if match:
+            return match.group(1)
+        else:
+            self.log_error(f"Could not extract local table name from distributed table {distributed_table}")
+            return distributed_table.replace('_distributed', '')  # Fallback to common naming pattern
+    
+    def check_data_skew(self, table_name, shard_rows):
+        """Check if there's significant skew in the data distribution"""
+        if not shard_rows:
+            return
+            
+        # Calculate min, max, and total rows
+        min_rows = min(count for _, count in shard_rows)
+        max_rows = max(count for _, count in shard_rows)
+        total_rows = sum(count for _, count in shard_rows)
+        
+        # Skip check if table is nearly empty
+        if total_rows < 100:
+            self.log_success(f"Table {table_name} has too few rows ({total_rows}) to check for skew")
+            return
+            
+        # Calculate skew percentage
+        if min_rows > 0:
+            skew_percentage = ((max_rows - min_rows) / min_rows) * 100
+            
+            # Print distribution information
+            for shard_num, count in shard_rows:
+                percent = (count / total_rows) * 100
+                print(f"  Shard {shard_num}: {count} rows ({percent:.2f}%)")
+                
+            if skew_percentage > 20:
+                self.log_error(f"Table {table_name} has significant data skew: {skew_percentage:.2f}% (min: {min_rows}, max: {max_rows})")
+            else:
+                self.log_success(f"Table {table_name} has acceptable data distribution with {skew_percentage:.2f}% skew")
+        else:
+            self.log_error(f"Table {table_name} has empty shards (min: {min_rows}, max: {max_rows})")
+
     def run_checks(self):
         """Run all checks for the ClickHouse lab implementation"""
         print(f"Starting checks for student: {self.student_username}")
@@ -277,11 +430,30 @@ class ClickHouseChecker:
             # Check if there's a MV writing to this table
             self.check_materialized_view("users_saldos_mv", "users_saldos")
             
+        # Check for additional MVs with different naming conventions
+        query = f"""
+        SELECT name FROM system.tables 
+        WHERE database = '{self.student_db}' AND engine LIKE 'Materialized%'
+        """
+        
+        additional_mvs = self.execute_query(query)
+        if additional_mvs:
+            for mv_name in additional_mvs:
+                mv_name = mv_name[0]
+                # Skip MVs we've already checked
+                if mv_name not in ["avg_amount", "important_transactions", "sum_tot_month_mv", "users_saldos_mv", "income_aggregated", "outcome_aggregated"]:
+                    self.log_success(f"Found additional materialized view: {mv_name}")
+                    self.check_materialized_view(mv_name)
+                    mv_count += 1
+            
         if mv_count < 2:
             self.log_error(f"Found only {mv_count} materialized views. At least 2 are required.")
             
         # Validate data by querying
         self.execute_validation_queries()
+
+        # Check data distribution across cluster nodes and check for data skew
+        self.check_data_distribution()
         
         # Print summary
         print("\n=== Summary ===")
