@@ -27,6 +27,8 @@ class CheckReport(BaseModel):
     check_description: str
     reason: Optional[str] = None
 
+# TODO: add groups to the report
+# TODO: add a report generation in a Markdown format
 class CheckerReport(BaseModel):
     """Structured log of checking"""
     checks: List[CheckReport] = []
