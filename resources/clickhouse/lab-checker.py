@@ -555,72 +555,13 @@ class ClickHouseChecker:
         self.student_db = f"{student_username}_db" if student_username else None
         self.checker_report = CheckerReport(checks=[])
         
-    def execute_query(self, query):
-        """Execute a query and return the result"""
-        return execute_query(self.client, query)
-            
-    def check_table_exists(self, table_name, expected_engine=None):
-        """Check if a table exists and has the expected engine"""
-        success, report, create_query = check_table_exists(
-            client=self.client,
-            db_name=self.student_db,
-            table_name=table_name,
-            expected_engine=expected_engine
-        )
-        self.checker_report.include(report)
-        return create_query if success else False
-        
-    def check_table_schema(self, table_name, expected_columns):
-        """Check if a table has the expected columns"""
-        success, report = check_table_schema(
-            client=self.client,
-            db_name=self.student_db,
-            table_name=table_name,
-            expected_columns=expected_columns
-        )
-        self.checker_report.include(report)
-        return success
-        
-    def check_distributed_table(self, table_name, expected_base_table):
-        """Check distributed table configuration"""
-        success, report = check_distributed_table(
-            client=self.client,
-            db_name=self.student_db,
-            table_name=table_name,
-            expected_base_table=expected_base_table,
-            cluster_name=self.cluster_name
-        )
-        self.checker_report.include(report)
-        return success
-        
-    def check_materialized_view(self, mv_name, expected_to_table=None):
-        """Check materialized view configuration"""
-        success, report = check_materialized_view(
-            client=self.client,
-            db_name=self.student_db,
-            mv_name=mv_name,
-            expected_to_table=expected_to_table
-        )
-        self.checker_report.include(report)
-        return success
-        
-    def check_view(self, view_name):
-        """Check view configuration"""
-        success, report = check_view(
-            client=self.client,
-            db_name=self.student_db,
-            view_name=view_name
-        )
-        self.checker_report.include(report)
-        return success
-        
     def execute_validation_queries(self):
         """Execute validation queries to check data correctness"""
         logger.info("=== Executing validation queries ===")
         
         # Check if base transactions table has data
         count_query = f"SELECT count() FROM {self.student_db}.transactions"
-        count_result = self.execute_query(count_query)
+        count_result = execute_query(self.client, count_query)
         
         if not count_result or count_result[0][0] == 0:
             error_msg = f"No data found in {self.student_db}.transactions"
@@ -641,7 +582,7 @@ class ClickHouseChecker:
             
         # Check if distributed table works
         dist_query = f"SELECT count() FROM {self.student_db}.transactions_distributed"
-        dist_result = self.execute_query(dist_query)
+        dist_result = execute_query(self.client, dist_query)
         
         if not dist_result:
             error_msg = f"Could not query {self.student_db}.transactions_distributed"
@@ -663,9 +604,11 @@ class ClickHouseChecker:
         # Check MV results if they exist
         
         # Check avg amount (MV option 1)
-        if self.check_table_exists("avg_amount", None):
+        table_report, create_query = check_table_exists(self.client, self.student_db, "avg_amount", None)
+        self.checker_report.include(table_report)
+        if create_query:
             avg_query = f"SELECT * FROM {self.student_db}.avg_amount WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            avg_result = self.execute_query(avg_query)
+            avg_result = execute_query(self.client, avg_query)
             if avg_result:
                 success_msg = "Successfully queried avg_amount materialized view"
                 logger.info(success_msg)
@@ -683,9 +626,11 @@ class ClickHouseChecker:
                 )
             
         # Check important transactions (MV option 2)
-        if self.check_table_exists("important_transactions", None):
+        table_report, create_query = check_table_exists(self.client, self.student_db, "important_transactions", None)
+        self.checker_report.include(table_report)
+        if create_query:
             important_query = f"SELECT * FROM {self.student_db}.important_transactions WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            important_result = self.execute_query(important_query)
+            important_result = execute_query(self.client, important_query)
             if important_result:
                 success_msg = "Successfully queried important_transactions materialized view"
                 logger.info(success_msg)
@@ -703,9 +648,11 @@ class ClickHouseChecker:
                 )
                 
         # Check transaction sums (MV option 3)
-        if self.check_table_exists("sum_tot_month", None):
+        table_report, create_query = check_table_exists(self.client, self.student_db, "sum_tot_month", None)
+        self.checker_report.include(table_report)
+        if create_query:
             sum_query = f"SELECT * FROM {self.student_db}.sum_tot_month WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            sum_result = self.execute_query(sum_query)
+            sum_result = execute_query(self.client, sum_query)
             if sum_result:
                 success_msg = "Successfully queried sum_tot_month materialized view"
                 logger.info(success_msg)
@@ -723,9 +670,11 @@ class ClickHouseChecker:
                 )
                 
         # Check user saldos (MV option 4)
-        if self.check_table_exists("users_saldos", None):
+        table_report, create_query = check_table_exists(self.client, self.student_db, "users_saldos", None)
+        self.checker_report.include(table_report)
+        if create_query:
             saldo_query = f"SELECT * FROM {self.student_db}.users_saldos WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            saldo_result = self.execute_query(saldo_query)
+            saldo_result = execute_query(self.client, saldo_query)
             if saldo_result:
                 success_msg = "Successfully queried users_saldos materialized view"
                 logger.info(success_msg)
@@ -743,38 +692,6 @@ class ClickHouseChecker:
                 )
                 
         return True
-    
-    def check_data_distribution(self):
-        """Check that data is properly distributed across all nodes in the cluster"""
-        # Define the required distributed tables based on lab task
-        required_tables = [
-            "transactions_distributed",  # Base data table
-        ]
-        
-        # Add MV-related distributed tables if they exist
-        if self.check_table_exists("transactions_aggregated_distributed", "Distributed"):
-            required_tables.append("transactions_aggregated_distributed")
-        
-        # Check if any of the potential materialized view distributed tables exist
-        potential_mv_tables = [
-            "avg_amount_distributed",
-            "important_transactions_distributed",
-            "sum_tot_month_distributed", 
-            "users_saldos_distributed"
-        ]
-        
-        for table in potential_mv_tables:
-            if self.check_table_exists(table, "Distributed"):
-                required_tables.append(table)
-        
-        success, report = check_data_distribution(
-            client=self.client,
-            db_name=self.student_db,
-            required_tables=required_tables,
-            cluster_name=self.cluster_name
-        )
-        self.checker_report.include(report)
-        return success
 
     def run_checks(self):
         """Run all checks for the ClickHouse lab implementation"""
@@ -787,13 +704,33 @@ class ClickHouseChecker:
         
         logger.info("=== Checking base tables ===")
         # Check base tables
-        base_tables_exist = self.check_table_exists("transactions", "MergeTree")
-        if base_tables_exist:
-            self.check_table_schema("transactions", ["user_id_out", "user_id_in", "important", "amount", "datetime"])
+        table_report, create_query = check_table_exists(
+            self.client, 
+            self.student_db, 
+            "transactions", 
+            "MergeTree"
+        )
+        self.checker_report.include(table_report)
+        
+        if create_query:
+            schema_report = check_table_schema(
+                self.client,
+                self.student_db,
+                "transactions",
+                ["user_id_out", "user_id_in", "important", "amount", "datetime"]
+            )
+            self.checker_report.include(schema_report)
             
         # Check distributed tables
         logger.info("=== Checking distributed tables ===")
-        self.check_distributed_table("transactions_distributed", "transactions")
+        dist_report = check_distributed_table(
+            self.client,
+            self.student_db,
+            "transactions_distributed",
+            "transactions",
+            self.cluster_name
+        )
+        self.checker_report.include(dist_report)
         
         # Check for MVs (at least 2 should exist)
         logger.info("=== Checking materialized views ===")
@@ -801,41 +738,123 @@ class ClickHouseChecker:
         mv_count = 0
         
         # Check transactions_aggregated if it exists (helper table for MVs)
-        if self.check_table_exists("transactions_aggregated", "AggregatingMergeTree"):
+        aggregated_report, aggregated_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "transactions_aggregated",
+            "AggregatingMergeTree"
+        )
+        self.checker_report.include(aggregated_report)
+        
+        if aggregated_create_query:
             logger.info("Found transactions_aggregated helper table")
-            self.check_distributed_table("transactions_aggregated_distributed", "transactions_aggregated")
+            aggregated_dist_report = check_distributed_table(
+                self.client,
+                self.student_db,
+                "transactions_aggregated_distributed",
+                "transactions_aggregated",
+                self.cluster_name
+            )
+            self.checker_report.include(aggregated_dist_report)
             
             # Check helper MVs if they exist
-            self.check_materialized_view("income_aggregated", "transactions_aggregated_distributed")
-            self.check_materialized_view("outcome_aggregated", "transactions_aggregated_distributed")
+            income_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "income_aggregated",
+                "transactions_aggregated_distributed"
+            )
+            self.checker_report.include(income_mv_report)
+            
+            outcome_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "outcome_aggregated",
+                "transactions_aggregated_distributed"
+            )
+            self.checker_report.include(outcome_mv_report)
         
         # MV option 1: Average amounts
-        if self.check_table_exists("avg_amount", None):
+        avg_report, avg_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "avg_amount", 
+            None
+        )
+        self.checker_report.include(avg_report)
+        
+        if avg_create_query:
             mv_count += 1
             logger.info("Found MV option 1: Average amounts")
             # Check if this is an actual MV
-            self.check_materialized_view("avg_amount")
+            avg_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "avg_amount"
+            )
+            self.checker_report.include(avg_mv_report)
             
         # MV option 2: Important transactions
-        if self.check_table_exists("important_transactions", None):
+        imp_report, imp_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "important_transactions", 
+            None
+        )
+        self.checker_report.include(imp_report)
+        
+        if imp_create_query:
             mv_count += 1
             logger.info("Found MV option 2: Important transactions")
             # Check if this is an actual MV
-            self.check_materialized_view("important_transactions")
+            imp_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "important_transactions"
+            )
+            self.checker_report.include(imp_mv_report)
             
         # MV option 3: Sum by months
-        if self.check_table_exists("sum_tot_month", "SummingMergeTree"):
+        sum_report, sum_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "sum_tot_month", 
+            "SummingMergeTree"
+        )
+        self.checker_report.include(sum_report)
+        
+        if sum_create_query:
             mv_count += 1
             logger.info("Found MV option 3: Sum by months")
             # Check if there's a MV writing to this table
-            self.check_materialized_view("sum_tot_month_mv", "sum_tot_month")
+            sum_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "sum_tot_month_mv", 
+                "sum_tot_month"
+            )
+            self.checker_report.include(sum_mv_report)
             
         # MV option 4: Users saldos
-        if self.check_table_exists("users_saldos", "SummingMergeTree"):
+        saldo_report, saldo_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "users_saldos", 
+            "SummingMergeTree"
+        )
+        self.checker_report.include(saldo_report)
+        
+        if saldo_create_query:
             mv_count += 1
             logger.info("Found MV option 4: Users saldos")
             # Check if there's a MV writing to this table
-            self.check_materialized_view("users_saldos_mv", "users_saldos")
+            saldo_mv_report = check_materialized_view(
+                self.client,
+                self.student_db,
+                "users_saldos_mv", 
+                "users_saldos"
+            )
+            self.checker_report.include(saldo_mv_report)
             
         # Check for additional MVs with different naming conventions
         query = f"""
@@ -843,14 +862,19 @@ class ClickHouseChecker:
         WHERE database = '{self.student_db}' AND engine LIKE 'Materialized%'
         """
         
-        additional_mvs = self.execute_query(query)
+        additional_mvs = execute_query(self.client, query)
         if additional_mvs:
             for mv_name in additional_mvs:
                 mv_name = mv_name[0]
                 # Skip MVs we've already checked
                 if mv_name not in ["avg_amount", "important_transactions", "sum_tot_month_mv", "users_saldos_mv", "income_aggregated", "outcome_aggregated"]:
                     logger.info(f"Found additional materialized view: {mv_name}")
-                    self.check_materialized_view(mv_name)
+                    additional_mv_report = check_materialized_view(
+                        self.client,
+                        self.student_db,
+                        mv_name
+                    )
+                    self.checker_report.include(additional_mv_report)
                     mv_count += 1
             
         if mv_count < 2:
@@ -866,7 +890,46 @@ class ClickHouseChecker:
         self.execute_validation_queries()
 
         # Check data distribution across cluster nodes and check for data skew
-        self.check_data_distribution()
+        # Define the required distributed tables based on lab task
+        required_tables = [
+            "transactions_distributed",  # Base data table
+        ]
+        
+        # Add MV-related distributed tables if they exist
+        aggregated_dist_report, aggregated_dist_create_query = check_table_exists(
+            self.client,
+            self.student_db,
+            "transactions_aggregated_distributed", 
+            "Distributed"
+        )
+        if aggregated_dist_create_query:
+            required_tables.append("transactions_aggregated_distributed")
+        
+        # Check if any of the potential materialized view distributed tables exist
+        potential_mv_tables = [
+            "avg_amount_distributed",
+            "important_transactions_distributed",
+            "sum_tot_month_distributed", 
+            "users_saldos_distributed"
+        ]
+        
+        for table in potential_mv_tables:
+            table_report, table_create_query = check_table_exists(
+                self.client,
+                self.student_db,
+                table, 
+                "Distributed"
+            )
+            if table_create_query:
+                required_tables.append(table)
+        
+        distribution_report = check_data_distribution(
+            self.client,
+            self.student_db,
+            required_tables,
+            self.cluster_name
+        )
+        self.checker_report.include(distribution_report)
         
         # Summary
         logger.info("=== Summary ===")
