@@ -12,11 +12,27 @@ class CheckReport(BaseModel):
     required: bool
     passed: bool
     check_description: str
-    error: Optional[str] = None
+    reason: Optional[str] = None
 
 class CheckerReport(BaseModel):
     """Structured log of checking"""
     checks: List[CheckReport]
+
+    def success(self, description: str, required: bool = True):
+        """Add a success check report to the checker report"""
+        self.checks.append(CheckReport(required=required, passed=True, check_description=description))
+
+    def fail(self, description: str, reason: str, required: bool = True):
+        """Add an error check report to the checker report"""
+        self.checks.append(CheckReport(required=required, passed=False, check_description=description, reason=reason))
+
+    def add(self, other: 'CheckReport'):
+        """Add a check report to the checker report"""
+        self.checks.append(other)
+
+    def include(self, other: 'CheckerReport'):
+        """Include another checker report into this one"""
+        self.checks.extend(other.checks)
 
 class ClickHouseChecker:
     def __init__(self, host='localhost', user='admin', password=None, student_username=None, cluster_name='main_cluster'):
@@ -34,7 +50,7 @@ class ClickHouseChecker:
             required=required,
             passed=passed,
             check_description=check_description,
-            error=error
+            reason=error
         )
         self.checker_report.checks.append(check)
         
