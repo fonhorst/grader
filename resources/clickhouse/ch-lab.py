@@ -115,6 +115,10 @@ class ClickHouseSetup:
         # Read parquet file
         df = pd.read_parquet(parquet_path)
         
+        # Convert datetime strings to proper datetime objects
+        if 'datetime' in df.columns and df['datetime'].dtype == 'object':
+            df['datetime'] = pd.to_datetime(df['datetime'])
+        
         # Insert data into distributed table
         self.client.execute(
             f'INSERT INTO {self.database}.transactions_distributed VALUES',
