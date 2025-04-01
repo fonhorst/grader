@@ -236,7 +236,7 @@ class ClickHouseChecker:
         potential_mv_tables = [
             "avg_amount_distributed",
             "important_transactions_distributed",
-            "sum_tot_month_distributed",
+            "sum_tot_month_distributed", 
             "users_saldos_distributed"
         ]
         
@@ -250,7 +250,7 @@ class ClickHouseChecker:
             
         # Get information about cluster shards
         shard_query = f"""
-        SELECT shard_num, host_name
+        SELECT shard_num
         FROM system.clusters
         WHERE cluster = '{self.cluster_name}'
         ORDER BY shard_num
@@ -266,67 +266,65 @@ class ClickHouseChecker:
         
         # Check distribution for each required table
         for table_name in required_tables:
-            # Extract the local table name from the distributed table
-            local_table = self.get_local_table_name(table_name)
-            if not local_table:
-                continue
-                
             print(f"\nChecking distribution for table {table_name}...")
             
-            # Check if data exists on all shards
-            shard_data_exists = True
-            shard_rows = []
+            # Query to check distribution using shardNum() function
+            distribution_query = f"""
+            SELECT shardNum() as shard, count() as row_count
+            FROM {self.student_db}.{table_name}
+            GROUP BY shard
+            ORDER BY shard
+            """
             
-            for shard_num, _ in shards:
-                # Query count from each shard
-                shard_query = f"""
-                SELECT count()
-                FROM {self.student_db}.{local_table}
-                WHERE _shard_num = {shard_num}
-                """
+            try:
+                # Execute the distribution query
+                result = self.execute_query(distribution_query)
                 
-                try:
-                    # Try first with _shard_num
-                    result = self.execute_query(shard_query)
-                    if result:
-                        row_count = result[0][0]
-                        shard_rows.append((shard_num, row_count))
-                except Exception:
-                    # If _shard_num doesn't work, try a different approach with remote function
-                    shard_query = f"""
-                    SELECT count()
-                    FROM remote('{self.cluster_name}', '{self.student_db}', '{local_table}', '{self.client.user}', '{self.client.password}')
-                    WHERE _shard_num = {shard_num}
-                    """
-                    try:
-                        result = self.execute_query(shard_query)
-                        if result:
-                            row_count = result[0][0]
-                            shard_rows.append((shard_num, row_count))
-                    except Exception:
-                        # Try one more approach without filtering by _shard_num
-                        shard_query = f"""
-                        SELECT hostName(), count()
-                        FROM clusterAllReplicas('{self.cluster_name}', '{self.student_db}.{local_table}')
-                        GROUP BY hostName()
-                        """
-                        result = self.execute_query(shard_query)
-                        if result:
-                            for hostname, row_count in result:
-                                # Find the shard number for this hostname
-                                for shard_num, host_name in shards:
-                                    if host_name in hostname:
-                                        shard_rows.append((shard_num, row_count))
-                                        break
-            
-            # Check if we got data from all shards
-            if len(shard_rows) < shard_count:
-                self.log_error(f"Table {table_name} data not found on all shards. Found on {len(shard_rows)}/{shard_count} shards.")
-                shard_data_exists = False
-            
-            # Only check for skew if data exists on all shards
-            if shard_data_exists and shard_rows:
-                self.check_data_skew(table_name, shard_rows)
+                if not result:
+                    self.log_error(f"Could not check distribution for table {table_name}")
+                    continue
+                    
+                # Process the results
+                shard_rows = []
+                for shard, count in result:
+                    if shard > 0:  # Only include actual shards (shardNum > 0)
+                        shard_rows.append((shard, count))
+                
+                # Calculate total rows
+                total_rows = sum(count for _, count in shard_rows)
+                
+                # Check if data exists on all shards
+                if len(shard_rows) < shard_count:
+                    self.log_error(f"Table {table_name} data not found on all shards. Found on {len(shard_rows)}/{shard_count} shards.")
+                    continue
+                
+                # Skip skew check for small tables
+                if total_rows < 100:
+                    self.log_success(f"Table {table_name} has too few rows ({total_rows}) to check for skew")
+                    continue
+                
+                # Calculate min and max rows to check for skew
+                min_rows = min(count for _, count in shard_rows)
+                max_rows = max(count for _, count in shard_rows)
+                
+                # Print distribution information
+                for shard, count in shard_rows:
+                    percent = (count / total_rows) * 100
+                    print(f"  Shard {shard}: {count} rows ({percent:.2f}%)")
+                
+                # Calculate and check skew percentage
+                if min_rows > 0:
+                    skew_percentage = ((max_rows - min_rows) / min_rows) * 100
+                    
+                    if skew_percentage > 20:
+                        self.log_error(f"Table {table_name} has significant data skew: {skew_percentage:.2f}% (min: {min_rows}, max: {max_rows})")
+                    else:
+                        self.log_success(f"Table {table_name} has acceptable data distribution with {skew_percentage:.2f}% skew")
+                else:
+                    self.log_error(f"Table {table_name} has empty shards (min: {min_rows}, max: {max_rows})")
+                
+            except Exception as e:
+                self.log_error(f"Error checking distribution for table {table_name}: {str(e)}")
                 
         return True
     
