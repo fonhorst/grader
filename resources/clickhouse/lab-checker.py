@@ -223,16 +223,29 @@ class ClickHouseChecker:
         """Check that data is properly distributed across all nodes in the cluster"""
         print("\n=== Checking data distribution across cluster ===")
         
-        # Get all distributed tables in the student's database
-        query = f"""
-        SELECT name 
-        FROM system.tables 
-        WHERE database = '{self.student_db}' AND engine = 'Distributed'
-        """
+        # Define the required distributed tables based on lab task
+        required_tables = [
+            "transactions_distributed",  # Base data table
+        ]
         
-        tables = self.execute_query(query)
-        if not tables:
-            self.log_error("No distributed tables found to check data distribution")
+        # Add MV-related distributed tables if they exist
+        if self.check_table_exists("transactions_aggregated_distributed", "Distributed"):
+            required_tables.append("transactions_aggregated_distributed")
+        
+        # Check if any of the potential materialized view distributed tables exist
+        potential_mv_tables = [
+            "avg_amount_distributed",
+            "important_transactions_distributed",
+            "sum_tot_month_distributed",
+            "users_saldos_distributed"
+        ]
+        
+        for table in potential_mv_tables:
+            if self.check_table_exists(table, "Distributed"):
+                required_tables.append(table)
+        
+        if not required_tables:
+            self.log_error("No required distributed tables found to check data distribution")
             return False
             
         # Get information about cluster shards
@@ -251,8 +264,8 @@ class ClickHouseChecker:
         shard_count = len(shards)
         self.log_success(f"Found {shard_count} shards in cluster {self.cluster_name}")
         
-        # Check distribution for each table
-        for table_name, in tables:
+        # Check distribution for each required table
+        for table_name in required_tables:
             # Extract the local table name from the distributed table
             local_table = self.get_local_table_name(table_name)
             if not local_table:
