@@ -14,10 +14,11 @@ class CheckReport(BaseModel):
 class CheckerReport(BaseModel):
     """Structured log of checking"""
     checks: List[CheckReport] = []
+    fail_reason: Optional[str] = None
 
     def has_success(self) -> bool:
         """Check if all checks are successful"""
-        return all(check.passed for check in self.checks if check.required)
+        return not self.fail_reason and all(check.passed for check in self.checks if check.required)
 
     def has_warnings(self) -> bool:
         """Check if any checks are failed"""

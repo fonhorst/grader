@@ -255,7 +255,8 @@ class UpdateStatusAttempt:
 def update_task_status_with_isolation(
     task_id: Union[str, uuid.UUID],
     new_status: TaskStatus,
-    expected_status: Optional[TaskStatus] = None
+    expected_status: Optional[TaskStatus] = None,
+    report: Optional[str] = None
 ) -> UpdateStatusAttempt:
     """
     Update task status in an isolated transaction.
@@ -264,7 +265,7 @@ def update_task_status_with_isolation(
         task_id: ID of the task to update
         new_status: New status to set
         expected_status: Optional status that the task should be in before update
-        is_cancelled: Optional new value for is_cancelled flag
+        report: Optional report to update
         
     Returns:
         UpdateStatusAttempt with success status and current status if failed
@@ -293,6 +294,9 @@ def update_task_status_with_isolation(
 
             if TaskStatus.is_terminal(new_status):
                 task.end_time = dt
+
+            if report is not None:
+                task.report = report
 
             return UpdateStatusAttempt(is_success=True)
 

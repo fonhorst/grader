@@ -36,6 +36,7 @@ async def run_check_with_cancellation(task: CheckingTask) -> Optional[CheckerRep
         return None
 
 
+# TODO: we need to add late ack here
 @broker.subscriber("test-queue")
 async def check(task: CheckingTask) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
@@ -60,7 +61,7 @@ async def check(task: CheckingTask) -> CheckingResult:
         # Wait for completion or cancellation
         while not check_task.done():
             # Check if task was cancelled
-            db_task = get_task(task.task_uid)
+            db_task = get_task_with_isolation(task.task_uid)
             if db_task.is_cancelled:
                 check_task.cancel()
                 attempt = update_task_status_with_isolation(
@@ -70,7 +71,7 @@ async def check(task: CheckingTask) -> CheckingResult:
                 )
                 if not attempt.is_success:
                     logger.warning(f"Task {task.task_uid} cannot be cancelled: "
-                                 f"current status is {attempt.current_status}. Expected: {TaskStatus.RUNNING}")
+                                 f"current status is {attempt.current_status}")
                 logger.info(f"Task {task.task_uid} was cancelled")
                 return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
             
@@ -84,29 +85,31 @@ async def check(task: CheckingTask) -> CheckingResult:
             
         logger.debug(f"Received report for {task.task_uid}: {report}")
         
-        # Update status to finished
+        # Update status to finished with the report
         attempt = update_task_status_with_isolation(
             task.task_uid,
             new_status=TaskStatus.FINISHED,
-            expected_status=TaskStatus.RUNNING
+            expected_status=TaskStatus.RUNNING,
+            report=report.model_dump_json()
         )
         if not attempt.is_success:
             logger.warning(f"Task {task.task_uid} cannot be marked as finished: "
-                         f"current status is {attempt.current_status}. Expected: {TaskStatus.RUNNING}")
+                         f"current status is {attempt.current_status}")
         
         logger.info(f"Successfully finished checking {task.task_uid}")
         return CheckingResult(task_uid=task.task_uid, report=report)
         
     except Exception as e:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
-        # Update status to failed
+        # Update status to failed with error message
         attempt = update_task_status_with_isolation(
             task.task_uid,
             new_status=TaskStatus.FAILED,
-            expected_status=TaskStatus.RUNNING
+            expected_status=TaskStatus.RUNNING,
+            report=CheckerReport(checks=[], fail_reason=str(e)).model_dump_json()
         )
         if not attempt.is_success:
             logger.warning(f"Task {task.task_uid} cannot be marked as failed: "
-                         f"current status is {attempt.current_status}. Expected: {TaskStatus.RUNNING}")
+                         f"current status is {attempt.current_status}")
         raise
 
