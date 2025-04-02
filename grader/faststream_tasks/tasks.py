@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Any, Dict
 
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
@@ -19,8 +18,7 @@ app = FastStream(broker)
 
 @broker.subscriber("test-queue")
 async def check(task: CheckingTask) -> CheckingResult:
-    print("JUST A TEST")
-
+    print("JUST A TEST HERE")
     return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
 
     report = run_checking(task.check_type, **task.args)
