@@ -44,6 +44,15 @@ pyarrow = "^19.0.1"
 grader = "grader.main:main"
 graderctl = "grader.cli:cli"
 
+[tool.pytest.ini_options]
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.5"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
