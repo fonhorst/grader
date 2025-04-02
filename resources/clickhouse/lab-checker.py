@@ -429,7 +429,7 @@ def check_materialized_view(client: Client, db_name: str, mv_name: str, expected
         
     engine, create_query = result[0]
     
-    if not engine.startswith("Materialized"):
+    if not create_query.lower().startswith("create materialized view"):
         error_msg = f"{db_name}.{mv_name} is not a materialized view"
         logger.error(error_msg)
         checker_report.fail(
@@ -439,7 +439,12 @@ def check_materialized_view(client: Client, db_name: str, mv_name: str, expected
         )
         return checker_report
         
-    if expected_to_table and f"TO {db_name}.{expected_to_table}" not in create_query:
+    if expected_to_table and \
+        (
+            (f"to {db_name}.{expected_to_table}" not in create_query.lower())
+            and
+            (f"create materialized view {db_name}.{expected_to_table}" not in create_query.lower())
+        ):
         error_msg = f"Materialized view {db_name}.{mv_name} doesn't write to {expected_to_table}"
         logger.error(error_msg)
         checker_report.fail(
