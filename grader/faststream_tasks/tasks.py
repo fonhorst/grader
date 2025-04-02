@@ -11,7 +11,7 @@ from grader.faststream_tasks.schemes import CheckingResult, CheckingTask
 
 logger = logging.getLogger(__name__)
 
-broker = RabbitBroker(os.envion.get("GRADER_FASTSTREAM_BROKER", "amqp://guest:guest@localhost:5672/")) 
+broker = RabbitBroker(os.envion.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:admin@localhost:5672/")) 
 
 app = FastStream(broker)
 
