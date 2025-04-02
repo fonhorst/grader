@@ -427,7 +427,7 @@ def check_materialized_view(client: Client, db_name: str, mv_name: str, expected
             )
         return checker_report
         
-    engine, create_query = result[0]
+    _, create_query = result[0]
     
     if not create_query.lower().startswith("create materialized view"):
         error_msg = f"{db_name}.{mv_name} is not a materialized view"
@@ -439,16 +439,11 @@ def check_materialized_view(client: Client, db_name: str, mv_name: str, expected
         )
         return checker_report
         
-    if expected_to_table and \
-        (
-            (f"to {db_name}.{expected_to_table}" not in create_query.lower())
-            and
-            (f"create materialized view {db_name}.{expected_to_table}" not in create_query.lower())
-        ):
-        error_msg = f"Materialized view {db_name}.{mv_name} doesn't write to {expected_to_table}"
+    if expected_to_table and f"from {db_name}.{expected_to_table}" not in create_query.lower():
+        error_msg = f"Materialized view {db_name}.{mv_name} doesn't take data from {expected_to_table}"
         logger.error(error_msg)
         checker_report.fail(
-            description=f"Check if materialized view {mv_name} writes to {expected_to_table}",
+            description=f"Check if materialized view {mv_name} takes data from {expected_to_table}",
             reason=error_msg,
             required=required
         )
@@ -858,6 +853,10 @@ class ClickHouseChecker(LabChecker):
             self.cluster_name
         )
         self.checker_report.include(dist_report)
+
+        distributed_tables_to_check = [
+            "transactions_distributed"
+        ]
         
         # Check for MVs (at least 2 should exist)
         logger.info("=== Checking materialized views ===")
@@ -883,13 +882,14 @@ class ClickHouseChecker(LabChecker):
                 self.cluster_name
             )
             self.checker_report.include(aggregated_dist_report)
+            distributed_tables_to_check.append("transactions_aggregated_distributed")
             
             # Check helper MVs if they exist
             income_mv_report = check_materialized_view(
                 self.client,
                 self.student_db,
                 "income_aggregated",
-                "transactions_aggregated_distributed"
+                "transactions"
             )
             self.checker_report.include(income_mv_report)
             
@@ -897,7 +897,7 @@ class ClickHouseChecker(LabChecker):
                 self.client,
                 self.student_db,
                 "outcome_aggregated",
-                "transactions_aggregated_distributed"
+                "transactions"
             )
             self.checker_report.include(outcome_mv_report)
         
@@ -914,6 +914,7 @@ class ClickHouseChecker(LabChecker):
                 "avg_amount"
             )
             self.checker_report.include(avg_mv_report)
+            distributed_tables_to_check.append("avg_amount_distributed")
             
         # MV option 2: Important transactions
         imp_create_query = get_table_if_exists(self.client, self.student_db, "important_transactions")
@@ -928,7 +929,7 @@ class ClickHouseChecker(LabChecker):
                 "important_transactions"
             )
             self.checker_report.include(imp_mv_report)
-            
+            distributed_tables_to_check.append("important_transactions_distributed")
         # MV option 3: Sum by months
         sum_create_query = get_table_if_exists(self.client, self.student_db, "sum_tot_month")
         
@@ -939,10 +940,11 @@ class ClickHouseChecker(LabChecker):
             sum_mv_report = check_materialized_view(
                 self.client,
                 self.student_db,
-                "sum_tot_month_mv", 
-                "sum_tot_month"
+                "sum_tot_month", 
+                "transactions_aggregated"
             )
             self.checker_report.include(sum_mv_report)
+            distributed_tables_to_check.append("sum_tot_month_distributed")
             
         # MV option 4: Users saldos
         saldo_create_query = get_table_if_exists(self.client, self.student_db, "users_saldos")
@@ -954,11 +956,11 @@ class ClickHouseChecker(LabChecker):
             saldo_mv_report = check_materialized_view(
                 self.client,
                 self.student_db,
-                "users_saldos_mv", 
-                "users_saldos"
+                "users_saldos", 
+                "transactions_aggregated"
             )
             self.checker_report.include(saldo_mv_report)
-            
+            distributed_tables_to_check.append("users_saldos_distributed")
         if mv_count < 2:
             error_msg = f"Found only {mv_count} materialized views. At least 2 are required."
             logger.error(error_msg)
@@ -971,29 +973,22 @@ class ClickHouseChecker(LabChecker):
         # Validate data by querying
         self.execute_validation_queries()
 
-        # Check data distribution across cluster nodes and check for data skew
-        # Define the required distributed tables based on lab task
-        required_tables = [
-            "transactions_distributed",  # Base data table
-        ]
-        
-        # Check if any of the potential materialized view distributed tables exist
-        potential_mv_tables = [
-            "transactions_aggregated_distributed",
-            "avg_amount_distributed",
-            "important_transactions_distributed",
-            "sum_tot_month_distributed", 
-            "users_saldos_distributed"
-        ]
-        
-        for table in potential_mv_tables:
-            if get_table_if_exists(self.client, self.student_db, table):
-                required_tables.append(table)
-        
+        data_distribution_to_check = []
+        for dtable in distributed_tables_to_check:
+            table_report, create_query = check_table_exists(
+                self.client,
+                self.student_db,
+                dtable,
+            )
+            self.checker_report.include(table_report)
+
+            if create_query:
+                data_distribution_to_check.append(dtable)
+    
         distribution_report = check_data_distribution(
             self.client,
             self.student_db,
-            required_tables,
+            data_distribution_to_check,
             self.cluster_name
         )
         self.checker_report.include(distribution_report)
