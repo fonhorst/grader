@@ -90,12 +90,8 @@ class CheckerService:
         # Send task to queue
         await self.broker.publish(checking_task, "test-queue")
         
-        # Update task status to running
-        update_task_status(task.id, TaskStatus.RUNNING)
-        
-        # Get updated task and convert to response
-        updated_task = get_task(task.id)
-        return TaskResponse.from_db_task(updated_task)
+        # Get task and convert to response
+        return TaskResponse.from_db_task(task)
 
     async def cancel(self, task_id: Union[str, uuid.UUID]) -> None:
         """

@@ -8,8 +8,13 @@ from grader.checking.checking import CheckType
 class CheckingTask(BaseModel):
     task_uid: str
     user_id: str
+    name: str
     check_type: CheckType
     args: Dict[str, Any]
+
+    @property
+    def full_name(self) -> str:
+        return f" Task {self.task_uid}: {self.name} of check type {self.check_type} (user {self.user_id})"
 
 
 class CheckingResult(BaseModel):
