@@ -110,7 +110,7 @@ def _standartize_datetime(dt: DateTimeType) -> datetime.datetime:
 
 
 def handle_name_like(filters: list, param: Mapped[str], value: Optional[Union[str, List[str]]]):
-    if value:
+    if not value:
         return
 
     if isinstance(value, list):
@@ -126,57 +126,36 @@ def handle_name_like(filters: list, param: Mapped[str], value: Optional[Union[st
 def create_task(
     *,
     uid: Optional[uuid.UUID] = None,
-    name: Optional[str] = None,
-    requester: Optional[str] = None,
-    student: Optional[str] = None,
-    project: Optional[str] = None,
+    name: str,
+    user_id: str,
     tag: Optional[str] = None,
-    task_type: TaskType,
-    job_id: str,
-    priority: float = 0.0,
-    parameters: Dict[str, Any],
+    attachment: Optional[str] = None,
     submit_time: Optional[datetime.datetime] = None
 ) -> Task:
-
-    # TODO: revise the implementation
     with SessionBuilder() as session:
         dt = datetime.datetime.now()
         task = Task(
             id=uid or uuid.uuid4(),
             name=name,
-            requester=requester,
-            student=student,
-            project=project,
+            user_id=user_id,
             tag=tag,
-            task_type=task_type.value,
-            job_id=job_id,
-            priority=priority,
-            parameters=parameters,
-            submit_time=submit_time or dt,
-            # TODO: unify with TaskStatus enum
+            attachment=attachment,
             status=TaskStatus.CREATED.value,
-            status_updated_at=submit_time or dt
+            status_updated_at=submit_time or dt,
+            submit_time=submit_time or dt
         )
         session.add(task)
         session.commit()
 
-    # TODO: should we read it again?
-    return get_task(uid)
+    return get_task(task.id)
 
 
-def get_task(task_id: Union[str, uuid.UUID], include_reason: bool = False) -> Task:
+def get_task(task_id: Union[str, uuid.UUID]) -> Task:
     with SessionBuilder() as session:
-        if include_reason:
-            task = cast(
-                Task,
-                session.query(Task).filter(Task.id == task_id).options(joinedload(Task.reason, innerjoin=False)).one()
-            )
-        else:
-            task = cast(Task, session.get(Task, task_id))
-
-        session.query()
-
-    return task
+        task = cast(Task, session.get(Task, task_id))
+        if not task:
+            raise ValueError(f"Task with id {task_id} not found")
+        return task
 
 
 def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
@@ -187,11 +166,12 @@ def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
             while attempt < max_retries:
                 try:
                     task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
-
                     curr_status = TaskStatus(task.status)
 
                     if not TaskStatus.can_proceed(curr_status, status):
-                        raise ValueError(f"Cannot change status from {curr_status} to {status}")
+                        raise ImpossibleTaskStatusTransition(
+                            f"Cannot change status from {curr_status} to {status}"
+                        )
 
                     dt = datetime.datetime.now()
                     task.status = status.value
@@ -202,31 +182,33 @@ def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
 
                     break
                 except OperationalError:
-                    logger.error("Unsuccessful attempt to update task status "
-                                 "(task_uid=%s) due to operational exeception. "
-                                 "Retry %s of %s" % (task_id, attempt, max_retries), exc_info=True)
-                attempt += 1
+                    logger.error(
+                        "Unsuccessful attempt to update task status "
+                        "(task_uid=%s) due to operational exception. "
+                        "Retry %s of %s",
+                        task_id, attempt + 1, max_retries,
+                        exc_info=True
+                    )
+                    attempt += 1
+                    if attempt >= max_retries:
+                        raise
 
 
 def delete_task(task_id: Union[str, uuid.UUID]):
     with SessionBuilder() as session:
-        session.query(Task).filter(Task.id == task_id).delete()
-        session.commit()
+        task = session.get(Task, task_id)
+        if task:
+            session.delete(task)
+            session.commit()
 
 
 def list_tasks(
         uids: Optional[List[str]] = None,
         name: Optional[Union[str, List[str]]] = None,
-        requester: Optional[Union[str, List[str]]] = None,
-        student: Optional[Union[str, List[str]]] = None,
-        project: Optional[Union[str, List[str]]] = None,
+        user_id: Optional[Union[str, List[str]]] = None,
         tag: Optional[Union[str, List[str]]] = None,
-        task_types: Optional[List[str]] = None,
-        job_ids: Optional[List[str]] = None,
-        statusess: Optional[List[str]] = None,
-        submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None,
-        include_reason: bool = False) -> List[Task]:
-    # TODO: revise the implementation
+        statuses: Optional[List[str]] = None,
+        submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None) -> List[Task]:
     with SessionBuilder() as session:
         query = session.query(Task)
 
@@ -236,16 +218,12 @@ def list_tasks(
 
         vparams = [
             (name, Task.name),
-            (requester, Task.requester),
-            (student, Task.student),
-            (project, Task.project),
+            (user_id, Task.user_id),
             (tag, Task.tag),
-            (task_types, Task.task_type),
-            (job_ids, Task.job_id),
-            (statusess, Task.status)
+            (statuses, Task.status)
         ]
         for value, param in vparams:
-            handle_name_like(filters, value, param)
+            handle_name_like(filters, param, value)
 
         if submit_time:
             start, end = submit_time
@@ -254,14 +232,10 @@ def list_tasks(
             if end:
                 filters.append(Task.submit_time <= _standartize_datetime(end))
 
-        if len(filters) > 0:
+        if filters:
             query = query.filter(*filters)
 
-        if include_reason:
-            query = query.options(joinedload(Task.reason, innerjoin=False))
-
         return cast(List[Task], query.all())
-
 
 
 def delete_all_tasks():
