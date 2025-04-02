@@ -1,0 +1,37 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your ClickHouse cluster has been deployed to namespace: {{ .Release.namespace }}
+
+======================================================================================
+IMPORTANT DEPLOYMENT INFORMATION
+======================================================================================
+
+ClickHouse Cluster Details:
+---------------------------
+Replicas: {{ .Values.clickhouse.replicaCount }}
+Cluster Name: {{ .Values.clickhouse.config.clusterName }}
+
+Access Information:
+------------------
+- HTTP Interface: 8123
+- TCP Interface: 9000
+- ZooKeeper Port: 9181
+
+Connection within cluster:
+-------------------------
+You can connect to individual nodes using:
+  clickhouse-<server num>.clickhouse-headless.{{ .Release.namespace }}.svc.<cluster name>
+
+Connection from outside:
+----------------------
+To connect to the ClickHouse HTTP interface:
+  kubectl port-forward -n {{ .Release.namespace }} svc/clickhouse-headless 8123:8123
+
+Default user: default
+Password: {{ .Values.clickhouse.config.settings.default_password }}
+
+For production deployments:
+--------------------------
+- Ensure you have sufficient PV storage available
+- Consider setting up proper monitoring and backups
+- Review your security settings before exposing externally

@@ -1,0 +1,13 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your HDFS cluster has been deployed to namespace: {{ .Release.namespace }}
+
+NameNode WebUI is available at:
+  http://namenode:{{ .Values.nameNode.service.webPort }}
+
+To connect to HDFS using the client:
+  hdfs dfs -ls hdfs://namenode:{{ .Values.nameNode.service.port }}/
+
+DataNode information:
+  - Replicas: {{ .Values.dataNode.replicaCount }}
+  - WebUI port: {{ .Values.dataNode.service.webPort }} 

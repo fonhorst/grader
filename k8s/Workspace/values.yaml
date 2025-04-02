@@ -1,0 +1,14 @@
+ns_cpu_limit: '8'
+ns_mem_limit: '64Gi'
+
+jupyter_cpu_limits: '4'
+jupyter_mem_limits: '32Gi'
+
+shared_data_path: /mnt/ess_storage/DN_1/students/shared-data
+
+# On install one also need to set
+# user: 'tutor'
+
+# Set home folder for the students
+# for instance, /mnt/ess_storage/DN_1/students/petrov
+# student_dir_path:

@@ -1,0 +1,39 @@
+# Storage configuration
+storage:
+  # Storage class name
+  className: local-storage
+  size: 100Gi
+
+# Labels
+labels:
+  service: clickhouse
+
+# Clickhouse configuration
+clickhouse:
+  replicas: 1
+  serviceName: clickhouse
+  accessManagement: 1
+  image:
+    repository: clickhouse
+    tag: 25.3.2.39
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "16Gi"
+      cpu: "2"
+    limits:
+      memory: "16Gi"
+      cpu: "4"
+  service:
+    type: ClusterIP
+    httpPort: 8123
+    tcpPort: 9000
+  persistence:
+    enabled: true
+    mountPath: /var/lib/clickhouse
+  config:
+    clusterName: "main_cluster"
+    settings:
+      default_replica_path: /var/lib/clickhouse/
+      default_password: clickhouse
+

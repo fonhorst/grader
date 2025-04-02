@@ -1,0 +1,43 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ .Values.user }}
+  name: student
+rules:
+- apiGroups: ["*"]
+  resources: ["pods", "pods/log", "pods/exec",  "pods/attach", "cronjobs", "services", "secrets",
+              "deployments", "replicasets", "statefulsets", "jobs", "configmaps", "persistencevolumeclaims"]
+  verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+- apiGroups: ["*"]
+  resources: ["events", "pv", "secrets",
+              "replicationcontrollers", "daemonsets", "horizontalpodautoscalers",
+              "storageclasses", "limitranges", "resourcequotas"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: student-binding-{{- .Values.user }}
+  namespace: {{ .Values.user }}
+subjects:
+- kind: User
+  name: {{ .Values.user }}
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: student
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pv-viewer-binding-{{- .Values.user }}
+subjects:
+- kind: User
+  name: {{ .Values.user }}
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: pv-viewer
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,56 @@
+# Default values for hdfs chart
+nameOverride: ""
+fullnameOverride: ""
+
+clusterName: hdfs-k8s
+
+defaultReplicationFactor: 3
+
+nameNode:
+  replicaCount: 1
+  image:
+    repository: hdfs-namenode
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  service:
+    type: ClusterIP
+    port: 9000
+    webPort: 9870
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+  configMap:
+    name: namenode-config
+
+dataNode:
+  replicaCount: 3
+  image:
+    repository: hdfs-datanode
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  service:
+    port: 9866
+    webPort: 9864
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+  configMap:
+    name: datanode-config 

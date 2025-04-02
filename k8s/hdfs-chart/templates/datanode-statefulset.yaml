@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: datanode
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: datanode-headless
+  replicas: {{ .Values.dataNode.replicaCount }}
+  selector:
+    matchLabels:
+      app: datanode
+  template:
+    metadata:
+      labels:
+        app: datanode
+    spec:
+      containers:
+      - name: datanode
+        image: "{{ .Values.dataNode.image.repository }}:{{ .Values.dataNode.image.tag }}"
+        imagePullPolicy: {{ .Values.dataNode.image.pullPolicy }}
+        ports:
+        - containerPort: 9866
+          name: datanode
+        - containerPort: 9864
+          name: web
+        env:
+        - name: HADOOP_HOME
+          value: /opt/hadoop
+        - name: HADOOP_CONF_DIR
+          value: /etc/hadoop
+        - name: CLUSTER_NAME
+          value: {{ .Values.clusterName }}
+        - name: HADOOP_HEAPSIZE_MAX
+          value: {{ include "hdfs.calculateHeapSize" .Values.dataNode.resources.limits.memory | quote }}
+        - name: HADOOP_HEAPSIZE_MIN
+          value: {{ include "hdfs.calculateHeapSize" .Values.dataNode.resources.requests.memory | quote }}
+        volumeMounts:
+        - name: hdfs-data
+          mountPath: /hadoop/dfs/data
+        - name: config
+          mountPath: /etc/hadoop
+        resources:
+          {{- toYaml .Values.dataNode.resources | nindent 12 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Values.dataNode.configMap.name }}
+  {{- if .Values.dataNode.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: hdfs-data
+    spec:
+      accessModes: 
+        - {{ .Values.dataNode.persistence.accessMode }}
+      {{- if .Values.dataNode.persistence.storageClass }}
+      storageClassName: {{ .Values.dataNode.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.dataNode.persistence.size }}
+  {{- end }} 

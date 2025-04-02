@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+    app: clickhouse
+spec:
+  serviceName: {{ .Values.clickhouse.serviceName }}
+  replicas: {{ .Values.clickhouse.replicas }}
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        {{- include "clickhouse.labels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: clickhouse
+        image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+        imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+        command: ["/pre-init.sh"]
+        ports:
+        - name: http
+          containerPort: {{ .Values.clickhouse.service.httpPort }}
+        - name: tcp
+          containerPort: {{ .Values.clickhouse.service.tcpPort }}
+        resources:
+          {{- toYaml .Values.clickhouse.resources | nindent 10 }}
+        env:
+        - name: CLICKHOUSE_CONFIG
+          value: /etc/clickhouse-server/config.xml
+        - name: CLICKHOUSE_USER
+          value: admin
+        - name: CLICKHOUSE_PASSWORD
+          value: admin
+        - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+          value: "{{ .Values.clickhouse.accessManagement }}"
+        volumeMounts:
+        {{- if .Values.clickhouse.persistence.enabled }}
+        - name: data
+          mountPath: {{ .Values.clickhouse.persistence.mountPath }}
+        {{- end }}
+        - name: pre-init
+          mountPath: /pre-init.sh
+          subPath: pre-init.sh
+        - name: config
+          mountPath: /etc/clickhouse-server/custom-config.xml.template
+          subPath: custom-config.xml.template
+      volumes:
+      - name: config
+        configMap:
+          name: clickhouse-config
+      - name: pre-init
+        configMap:
+          name: clickhouse-config
+          items:
+            - key: pre-init.sh
+              path: pre-init.sh
+          defaultMode: 0755
+  {{- if .Values.clickhouse.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.storage.className }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.size }}
+  {{- end }}
+

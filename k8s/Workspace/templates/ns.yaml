@@ -1,0 +1,40 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.user }}
+  labels:
+    target: llm-course
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  namespace: {{ .Values.user }}
+  name: ephemeral-storage-limit-range
+spec:
+  limits:
+  - default:
+      ephemeral-storage: 200Gi
+    defaultRequest:
+      ephemeral-storage: 100Gi
+    type: Container
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  namespace: {{ .Values.user }}
+  name: mem-cpu-quota
+spec:
+  hard:
+    limits.cpu: {{ .Values.ns_cpu_limit }}
+    limits.memory: {{ .Values.ns_mem_limit }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  namespace: {{ .Values.user }}
+  name: pod-quota
+spec:
+  hard:
+    count/pods: '50'
+    pods: "16"

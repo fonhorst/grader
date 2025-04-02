@@ -1,0 +1,57 @@
+# Default values for hdfs chart
+nameOverride: ""
+fullnameOverride: ""
+
+clusterName: grader-hdfs
+
+defaultReplicationFactor: 1
+
+nameNode:
+  replicaCount: 1
+  image:
+    repository: node2.bdcl:5000/grader-hdfs-namenode
+    tag: latest
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 2
+      memory: 8Gi
+    limits:
+      cpu: 2
+      memory: 8Gi
+  service:
+    type: NodePort
+    port: 9000
+    webPort: 9870
+  persistence:
+    enabled: true
+    storageClass: "ess-dn2"
+    accessMode: ReadWriteOnce
+    size: 30Gi
+  configMap:
+    name: namenode-config
+
+dataNode:
+  replicaCount: 1
+  image:
+    repository: node2.bdcl:5000/grader-hdfs-datanode
+    tag: latest
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: 2
+      memory: 16Gi
+    limits:
+      cpu: 2
+      memory: 16Gi
+  service:
+    port: 9866
+    webPort: 9864
+  persistence:
+    enabled: true
+    storageClass: "ess-dn2"
+    accessMode: ReadWriteOnce
+    size: 100Gi
+  configMap:
+    name: datanode-config 
+

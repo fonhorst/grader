@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "clickhouse.labels" . | nindent 4 }}
+    app: clickhouse
+data:
+  pre-init.sh: |-
+    #!/bin/bash
+    
+    set -e
+    echo "Pre-initializing ClickHouse configuration"
+    
+    # Extract server_id from hostname
+    if [ -z "$HOSTNAME" ]; then
+      echo "ERROR: HOSTNAME env var is not set"
+      exit 1
+    fi
+    
+    # Extract the server ID from the hostname (the number after the last dash)
+    BASE_ID=$(echo "$HOSTNAME" | grep -o '[0-9]*$')
+    
+    # Add 1 to the server ID
+    SERVER_ID=$((BASE_ID + 1))
+    
+    # Process the template file and replace {server_id} with the actual server ID
+    sed "s/{server_id}/$SERVER_ID/g" /etc/clickhouse-server/custom-config.xml.template > /etc/clickhouse-server/config.d/custom-config.xml
+    
+    echo "Pre-initialization complete"
+    set +e
+    echo "Starting ClickHouse /entrypoint.sh"
+    exec /entrypoint.sh
+
+  custom-config.xml.template: |-
+    <clickhouse>
+      <path>{{ .Values.clickhouse.persistence.mountPath }}</path>
+      <!-- <tmp_path>{{ .Values.clickhouse.persistence.mountPath }}/tmp</tmp_path>
+      <user_files_path>{{ .Values.clickhouse.persistence.mountPath }}/user_files</user_files_path>
+      <format_schema_path>{{ .Values.clickhouse.persistence.mountPath }}/format_schemas</format_schema_path>-->
+      
+      <listen_host>0.0.0.0</listen_host>
+
+      <logger>
+          <level>information</level>
+          <console>1</console>
+      </logger>
+
+      <keeper_server>
+        <tcp_port>9181</tcp_port>
+        <server_id>{server_id}</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>warning</raft_logs_level>
+        </coordination_settings>
+
+        <raft_configuration>
+            {{- $replicaCount := int .Values.clickhouse.replicas }}
+            {{- range $i := until $replicaCount }}
+            <server>
+                <id>{{ add $i 1 }}</id>
+                <hostname>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</hostname>
+                <port>9234</port>
+            </server>
+            {{- end }}
+        </raft_configuration>
+      </keeper_server>
+      
+      <zookeeper>
+        {{- $replicaCount := int .Values.clickhouse.replicas}}
+        {{- range $i := until $replicaCount }}
+        <node>
+            <host>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</host>
+            <port>9181</port>
+        </node>
+        {{- end }}
+      </zookeeper>
+
+      <remote_servers>
+        <{{ .Values.clickhouse.config.clusterName }}>
+          {{- $replicaCount := int .Values.clickhouse.replicas }}
+          {{- range $i := until $replicaCount }}
+          <shard>
+              <replica>
+                <host>clickhouse-{{ $i }}.{{ $.Values.clickhouse.serviceName }}</host>
+                <port>9000</port>
+                <user>admin</user>
+                <password>admin</password>
+              </replica>
+          </shard>
+          {{- end }}
+        </{{ .Values.clickhouse.config.clusterName }}>
+      </remote_servers>
+    </clickhouse>
+
+

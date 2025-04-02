@@ -1,0 +1,16 @@
+{{- if .Values.nameNode.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: namenode-pvc
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - {{ .Values.nameNode.persistence.accessMode }}
+  {{- if .Values.nameNode.persistence.storageClass }}
+  storageClassName: {{ .Values.nameNode.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.nameNode.persistence.size }}
+{{- end }} 

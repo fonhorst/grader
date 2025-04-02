@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: namenode
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.nameNode.replicaCount }}
+  selector:
+    matchLabels:
+      app: namenode
+  template:
+    metadata:
+      labels:
+        app: namenode
+    spec:
+      containers:
+      - name: namenode
+        image: "{{ .Values.nameNode.image.repository }}:{{ .Values.nameNode.image.tag }}"
+        imagePullPolicy: {{ .Values.nameNode.image.pullPolicy }}
+        ports:
+        - containerPort: 9000
+          name: hdfs
+        - containerPort: 9870
+          name: web
+        env:
+        - name: HADOOP_HOME
+          value: /opt/hadoop
+        - name: HADOOP_CONF_DIR
+          value: /etc/hadoop
+        - name: HDFS_CONF_dfs_namenode_name_dir
+          value: file:///hadoop/dfs/name
+        - name: CLUSTER_NAME
+          value: {{ .Values.clusterName }}
+        - name: HADOOP_HEAPSIZE_MAX
+          value: {{ include "hdfs.calculateHeapSize" .Values.nameNode.resources.limits.memory | quote }}
+        - name: HADOOP_HEAPSIZE_MIN
+          value: {{ include "hdfs.calculateHeapSize" .Values.nameNode.resources.requests.memory | quote }}
+        volumeMounts:
+        - name: hdfs-name
+          mountPath: /hadoop/dfs/name
+        - name: config
+          mountPath: /etc/hadoop
+        resources:
+          {{- toYaml .Values.nameNode.resources | nindent 12 }}
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Values.nameNode.configMap.name }}
+      {{- if .Values.nameNode.persistence.enabled }}
+      - name: hdfs-name
+        persistentVolumeClaim:
+          claimName: namenode-pvc
+      {{- else }}
+      - name: hdfs-name
+        emptyDir: {}
+      {{- end }} 
