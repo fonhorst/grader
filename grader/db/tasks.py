@@ -96,6 +96,8 @@ class Task(Base):
 
     report: Mapped[str] = mapped_column(nullable=True)
 
+    is_cancelled: Mapped[bool] = mapped_column(default=False)
+
     def __repr__(self) -> str:
         return f"Task(id={self.id!r}, user_id={self.user_id!r}, name={self.name!r}, status={self.status!r})"
 
@@ -242,4 +244,75 @@ def delete_all_tasks():
     with SessionBuilder() as session:
         session.query(Task).delete()
         session.commit()
+
+
+def update_task_status_with_isolation(
+    task_id: Union[str, uuid.UUID],
+    status: TaskStatus,
+    is_cancelled: Optional[bool] = None
+) -> Task:
+    """
+    Update task status in an isolated transaction.
+    
+    Args:
+        task_id: ID of the task to update
+        status: New status to set
+        is_cancelled: Optional new value for is_cancelled flag
+        
+    Returns:
+        Updated task
+    """
+    with SessionBuilder(bind=isolated_engine) as session:
+        with session.begin():
+            task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
+            
+            curr_status = TaskStatus(task.status)
+            if not TaskStatus.can_proceed(curr_status, status):
+                raise ImpossibleTaskStatusTransition(
+                    f"Cannot change status from {curr_status} to {status}"
+                )
+
+            dt = datetime.datetime.now()
+            task.status = status.value
+            task.status_updated_at = dt
+
+            if TaskStatus.is_terminal(status):
+                task.end_time = dt
+
+            if is_cancelled is not None:
+                task.is_cancelled = is_cancelled
+
+            return task
+
+
+def mark_task_cancelled(task_id: Union[str, uuid.UUID]) -> Task:
+    """
+    Mark task as cancelled by setting is_cancelled flag.
+    
+    Args:
+        task_id: ID of the task to mark as cancelled
+        
+    Returns:
+        Updated task
+    """
+    with SessionBuilder(bind=isolated_engine) as session:
+        with session.begin():
+            task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
+            task.is_cancelled = True
+            return task
+
+
+def get_task_with_isolation(task_id: Union[str, uuid.UUID]) -> Task:
+    """
+    Get task with isolation level.
+    
+    Args:
+        task_id: ID of the task to get
+        
+    Returns:
+        Task object
+    """
+    with SessionBuilder(bind=isolated_engine) as session:
+        with session.begin():
+            return cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
 

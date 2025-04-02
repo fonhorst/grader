@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from grader.checking.checking import CheckType
 from grader.db.tasks import (
     Task, TaskStatus, create_task, get_task, update_task_status,
-    delete_task, list_tasks, delete_all_tasks
+    delete_task, list_tasks, delete_all_tasks, get_task_with_isolation, update_task_status_with_isolation,
+    mark_task_cancelled
 )
 from grader.faststream_tasks.schemes import CheckingTask
 from grader.faststream_tasks.tasks import broker
@@ -96,14 +97,26 @@ class CheckerService:
 
     async def cancel(self, task_id: Union[str, uuid.UUID]) -> None:
         """
-        Cancel a running task.
+        Cancel a task.
+        
+        If the task is in CREATED status, it will be marked as CANCELLED immediately.
+        If the task is in RUNNING status, it will be marked for cancellation and the checker
+        will stop it at the next check point.
         
         Args:
             task_id: ID of the task to cancel
+            
+        Raises:
+            ValueError: If task is in a status that cannot be cancelled
         """
         task = get_task(task_id)
-        if task.status == TaskStatus.RUNNING:
-            update_task_status(task_id, TaskStatus.CANCELLED)
+        
+        if task.status == TaskStatus.CREATED.value:
+            # Task hasn't started yet, just mark it as cancelled
+            update_task_status_with_isolation(task_id, TaskStatus.CANCELLED)
+        elif task.status == TaskStatus.RUNNING.value:
+            # Task is running, mark it for cancellation
+            mark_task_cancelled(task_id)
         else:
             raise ValueError(f"Cannot cancel task in status {task.status}")
 
