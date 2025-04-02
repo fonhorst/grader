@@ -1021,8 +1021,8 @@ def main():
     parser.add_argument('--user', default='admin', help='Admin username')
     parser.add_argument('--student', required=True, help='Student username')
     parser.add_argument('--cluster-name', default='main_cluster', help='ClickHouse cluster name')
-    parser.add_argument('--output-json', help='Path to save the checker report as JSON')
-    parser.add_argument('--output-markdown', help='Path to save the checker report as Markdown')
+    parser.add_argument('--output-json', default='checker_report.json', help='Path to save the checker report as JSON')
+    parser.add_argument('--output-markdown', default='checker_report.md', help='Path to save the checker report as Markdown')
     parser.add_argument('--log-file', help='Path to save logs')
     
     args = parser.parse_args()
