@@ -19,7 +19,7 @@ broker = RabbitBroker(os.environ.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:a
 app = FastStream(broker)
 
 
-async def run_check_with_cancellation(task: CheckingTask) -> Optional[CheckerReport]:
+async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
     """
     Run checking function with cancellation support.
     
@@ -29,11 +29,14 @@ async def run_check_with_cancellation(task: CheckingTask) -> Optional[CheckerRep
     Returns:
         CheckerReport if successful, None if cancelled
     """
-    try:
-        return run_checking(task.check_type, **task.args)
-    except asyncio.CancelledError:
-        logger.info(f"Check for task {task.task_uid} was cancelled")
-        return None
+    # Run the synchronous checking function in a thread pool executor
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None,
+        run_checking,
+        task.check_type,
+        **task.args
+    )
 
 
 # TODO: we need to add late ack here
@@ -59,9 +62,20 @@ async def check(task: CheckingTask) -> CheckingResult:
         check_task = asyncio.create_task(run_check_with_cancellation(task))
         
         # Wait for completion or cancellation
-        while not check_task.done():
+        # TODO: verify the logic here and shield of cancellation with timeout works as expected
+        while True:
+            try:
+                report = await asyncio.wait_for(asyncio.shield(check_task), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+            except asyncio.CancelledError:
+                pass
+
+            if report is not None:
+                break
+            
             # Check if task was cancelled
-            db_task = get_task_with_isolation(task.task_uid)
+            db_task = get_task(task.task_uid)
             if db_task.is_cancelled:
                 check_task.cancel()
                 attempt = update_task_status_with_isolation(
@@ -74,11 +88,6 @@ async def check(task: CheckingTask) -> CheckingResult:
                                  f"current status is {attempt.current_status}")
                 logger.info(f"Task {task.task_uid} was cancelled")
                 return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
-            
-            await asyncio.sleep(5)  # Check every 5 seconds
-        
-        # Get the result
-        report = await check_task
         
         if report is None:  # Task was cancelled
             return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
