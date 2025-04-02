@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class CheckType(str, Enum):
-    clickhouse = "clickhouse"
+    CLICKHOUSE = "clickhouse"
 
 
 def run_checking(check_type: CheckType, **kwargs) -> CheckerReport:
     match check_type:
-        case CheckType.clickhouse:
+        case CheckType.CLICKHOUSE:
             checker = ClickHouseChecker(**kwargs)
         
         case _:
@@ -47,7 +47,7 @@ def main():
     password = input(f"Enter ClickHouse password for {args.user}: ")
     
     report = run_checking(
-        check_type=CheckType.clickhouse, 
+        check_type=CheckType.CLICKHOUSE, 
         host=args.host,
         user=args.user,
         password=password,
