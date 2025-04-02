@@ -40,15 +40,19 @@ async def run_check_with_cancellation(task: CheckingTask) -> Optional[CheckerRep
 async def check(task: CheckingTask) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
     
-    # Get task with isolation to check its status
-    db_task = get_task(task.task_uid)
-    if db_task.status != TaskStatus.CREATED.value:
-        logger.warning(f"Task {task.task_uid} is in status {db_task.status}, skipping")
-        return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
-    
     try:
-        # Update status to running
-        update_task_status_with_isolation(task.task_uid, TaskStatus.RUNNING)
+        # Try to update status to running, ensuring task is in CREATED state
+        attempt = update_task_status_with_isolation(
+            task.task_uid,
+            new_status=TaskStatus.RUNNING,
+            expected_status=TaskStatus.CREATED
+        )
+
+        if not attempt.is_success:
+            logger.warning(f"Task {task.task_uid} cannot be started "
+                         f"because it is not in the expected state: {attempt.current_status}. "
+                         f"Expected: {TaskStatus.CREATED}")
+            return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
         
         # Create and start the checking task
         check_task = asyncio.create_task(run_check_with_cancellation(task))
@@ -56,10 +60,17 @@ async def check(task: CheckingTask) -> CheckingResult:
         # Wait for completion or cancellation
         while not check_task.done():
             # Check if task was cancelled
-            db_task = get_task(task.task_uid)
+            db_task = get_task_with_isolation(task.task_uid)
             if db_task.is_cancelled:
                 check_task.cancel()
-                update_task_status_with_isolation(task.task_uid, TaskStatus.CANCELLED)
+                attempt = update_task_status_with_isolation(
+                    task.task_uid,
+                    new_status=TaskStatus.CANCELLED,
+                    expected_status=TaskStatus.RUNNING
+                )
+                if not attempt.is_success:
+                    logger.warning(f"Task {task.task_uid} cannot be cancelled: "
+                                 f"current status is {attempt.current_status}")
                 logger.info(f"Task {task.task_uid} was cancelled")
                 return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
             
@@ -74,7 +85,14 @@ async def check(task: CheckingTask) -> CheckingResult:
         logger.debug(f"Received report for {task.task_uid}: {report}")
         
         # Update status to finished
-        update_task_status_with_isolation(task.task_uid, TaskStatus.FINISHED)
+        attempt = update_task_status_with_isolation(
+            task.task_uid,
+            new_status=TaskStatus.FINISHED,
+            expected_status=TaskStatus.RUNNING
+        )
+        if not attempt.is_success:
+            logger.warning(f"Task {task.task_uid} cannot be marked as finished: "
+                         f"current status is {attempt.current_status}")
         
         logger.info(f"Successfully finished checking {task.task_uid}")
         return CheckingResult(task_uid=task.task_uid, report=report)
@@ -82,6 +100,13 @@ async def check(task: CheckingTask) -> CheckingResult:
     except Exception as e:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
         # Update status to failed
-        update_task_status_with_isolation(task.task_uid, TaskStatus.FAILED)
+        attempt = update_task_status_with_isolation(
+            task.task_uid,
+            new_status=TaskStatus.FAILED,
+            expected_status=TaskStatus.RUNNING
+        )
+        if not attempt.is_success:
+            logger.warning(f"Task {task.task_uid} cannot be marked as failed: "
+                         f"current status is {attempt.current_status}")
         raise
 
