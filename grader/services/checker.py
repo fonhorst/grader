@@ -83,6 +83,7 @@ class CheckerService:
         checking_task = CheckingTask(
             task_uid=str(task.id),
             user_id=task.user_id,
+            name=task.name,
             check_type=check_type,
             args=args
         )

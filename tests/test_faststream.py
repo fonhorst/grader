@@ -11,7 +11,7 @@ async def test_handle():
         print("JUST A TEST")
         # result = await br.publish(
         response = await br.request(
-            CheckingTask(task_uid="1", user_id="tutor", check_type=CheckType.CLICKHOUSE, args={
+            CheckingTask(task_uid="1", user_id="tutor", name="Test task", check_type=CheckType.CLICKHOUSE, args={
                 "host": "localhost", 
                 "user": "admin", 
                 "password": "admin", 
