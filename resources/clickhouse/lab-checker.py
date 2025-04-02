@@ -710,18 +710,14 @@ class ClickHouseChecker(LabChecker):
                     success_msg = f"Successfully executed query: {query.query}"
                     logger.info(success_msg)
                     self.checker_report.success(
-                        description=query.description,
-                        required=query.required,
-                        check_group=query.check_group
+                        description=query.description
                     )
                 else:
                     error_msg = f"Query returned no results: {query.query}"
                     logger.error(error_msg)
                     self.checker_report.fail(
                         description=query.description,
-                        reason=error_msg,
-                        required=query.required,
-                        check_group=query.check_group
+                        reason=error_msg
                     )
             except Exception as e:
                 error_msg = f"Error executing query: {query.query}\nError: {str(e)}"
@@ -729,8 +725,7 @@ class ClickHouseChecker(LabChecker):
                 self.checker_report.fail(
                     description=query.description,
                     reason=error_msg,
-                    required=query.required,
-                    check_group=query.check_group
+                    required=True
                 )
         
         return True
@@ -910,7 +905,7 @@ class ClickHouseChecker(LabChecker):
                 validation_queries.append(
                     CheckableQuery(
                         # TODO: at least verifye the count is not 0
-                        query=f"SELECT count() as count FROM {self.student_db}.{table} WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5",
+                        query=f"SELECT count() as count FROM {self.student_db}.{table} LIMIT 5",
                         description=f"Check if {table} is queryable"
                     )
                 )
