@@ -137,6 +137,16 @@ class CheckerReport(BaseModel):
         return "".join(md)
 
 
+class CheckableQuery(BaseModel):
+    """Represents a query that can be validated"""
+    query: str
+    description: str
+    
+    def validate(self, result) -> bool:
+        """Validate the query result"""
+        return result is not None and len(result) > 0
+
+
 def execute_query(client: Client, query: str) -> Optional[List[Tuple]]:
     """Execute a query and return the result
     
@@ -681,140 +691,51 @@ class ClickHouseChecker(LabChecker):
         self.student_db = f"{student_username}_db" if student_username else None
         self.checker_report = CheckerReport(checks=[])
         
-    def execute_validation_queries(self):
-        """Execute validation queries to check data correctness"""
+    def execute_validation_queries(self, validation_queries: List[CheckableQuery]) -> bool:
+        """Execute validation queries to check data correctness
+        
+        Args:
+            validation_queries: List of queries to validate
+            
+        Returns:
+            bool: True if all required queries passed
+        """
         logger.info("=== Executing validation queries ===")
         
-        # Check if base transactions table has data
-        count_query = f"SELECT count() FROM {self.student_db}.transactions"
-        count_result = execute_query(self.client, count_query)
+        # Execute and validate each query
+        for query in validation_queries:
+            try:
+                result = execute_query(self.client, query.query)
+                if query.validate(result):
+                    success_msg = f"Successfully executed query: {query.query}"
+                    logger.info(success_msg)
+                    self.checker_report.success(
+                        description=query.description,
+                        required=query.required,
+                        check_group=query.check_group
+                    )
+                else:
+                    error_msg = f"Query returned no results: {query.query}"
+                    logger.error(error_msg)
+                    self.checker_report.fail(
+                        description=query.description,
+                        reason=error_msg,
+                        required=query.required,
+                        check_group=query.check_group
+                    )
+            except Exception as e:
+                error_msg = f"Error executing query: {query.query}\nError: {str(e)}"
+                logger.error(error_msg)
+                self.checker_report.fail(
+                    description=query.description,
+                    reason=error_msg,
+                    required=query.required,
+                    check_group=query.check_group
+                )
         
-        if not count_result or count_result[0][0] == 0:
-            error_msg = f"No data found in {self.student_db}.transactions"
-            logger.error(error_msg)
-            self.checker_report.fail(
-                description="Check if transactions table has data",
-                reason=error_msg,
-                required=True
-            )
-            return False
-        else:
-            success_msg = f"Found {count_result[0][0]} records in {self.student_db}.transactions"
-            logger.info(success_msg)
-            self.checker_report.success(
-                description=success_msg,
-                required=True
-            )
-            
-        # Check if distributed table works
-        dist_query = f"SELECT count() FROM {self.student_db}.transactions_distributed"
-        dist_result = execute_query(self.client, dist_query)
-        
-        if not dist_result:
-            error_msg = f"Could not query {self.student_db}.transactions_distributed"
-            logger.error(error_msg)
-            self.checker_report.fail(
-                description="Check if distributed table is queryable",
-                reason=error_msg,
-                required=True
-            )
-            return False
-        else:
-            success_msg = "Successfully queried distributed table"
-            logger.info(success_msg)
-            self.checker_report.success(
-                description=success_msg,
-                required=True
-            )
-            
-        # Check MV results if they exist
-        
-        # Check avg amount (MV option 1)
-        create_query = get_table_if_exists(self.client, self.student_db, "avg_amount")
-        if create_query:
-            avg_query = f"SELECT * FROM {self.student_db}.avg_amount WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            avg_result = execute_query(self.client, avg_query)
-            if avg_result:
-                success_msg = "Successfully queried avg_amount materialized view"
-                logger.info(success_msg)
-                self.checker_report.success(
-                    description=success_msg,
-                    required=False
-                )
-            else:
-                error_msg = "Could not query avg_amount view"
-                logger.error(error_msg)
-                self.checker_report.fail(
-                    description="Check if avg_amount materialized view is queryable",
-                    reason=error_msg,
-                    required=False
-                )
-            
-        # Check important transactions (MV option 2)
-        create_query = get_table_if_exists(self.client, self.student_db, "important_transactions")
-        if create_query:
-            important_query = f"SELECT * FROM {self.student_db}.important_transactions WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            important_result = execute_query(self.client, important_query)
-            if important_result:
-                success_msg = "Successfully queried important_transactions materialized view"
-                logger.info(success_msg)
-                self.checker_report.success(
-                    description=success_msg,
-                    required=False
-                )
-            else:
-                error_msg = "Could not query important_transactions view"
-                logger.error(error_msg)
-                self.checker_report.fail(
-                    description="Check if important_transactions materialized view is queryable",
-                    reason=error_msg,
-                    required=False
-                )
-                
-        # Check transaction sums (MV option 3)
-        create_query = get_table_if_exists(self.client, self.student_db, "sum_tot_month")
-        if create_query:
-            sum_query = f"SELECT * FROM {self.student_db}.sum_tot_month WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            sum_result = execute_query(self.client, sum_query)
-            if sum_result:
-                success_msg = "Successfully queried sum_tot_month materialized view"
-                logger.info(success_msg)
-                self.checker_report.success(
-                    description=success_msg,
-                    required=False
-                )
-            else:
-                error_msg = "Could not query sum_tot_month view"
-                logger.error(error_msg)
-                self.checker_report.fail(
-                    description="Check if sum_tot_month materialized view is queryable",
-                    reason=error_msg,
-                    required=False
-                )
-                
-        # Check user saldos (MV option 4)
-        create_query = get_table_if_exists(self.client, self.student_db, "users_saldos")
-        if create_query:
-            saldo_query = f"SELECT * FROM {self.student_db}.users_saldos WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5"
-            saldo_result = execute_query(self.client, saldo_query)
-            if saldo_result:
-                success_msg = "Successfully queried users_saldos materialized view"
-                logger.info(success_msg)
-                self.checker_report.success(
-                    description=success_msg,
-                    required=False
-                )
-            else:
-                error_msg = "Could not query users_saldos view"
-                logger.error(error_msg)
-                self.checker_report.fail(
-                    description="Check if users_saldos materialized view is queryable",
-                    reason=error_msg,
-                    required=False
-                )
-                
         return True
 
+    # TODO: make it a little bit more structured and clearly splitted on explicit steps 
     def run_checks(self):
         """Run all checks for the ClickHouse lab implementation"""
         # Create a fresh report
@@ -930,6 +851,7 @@ class ClickHouseChecker(LabChecker):
             )
             self.checker_report.include(imp_mv_report)
             distributed_tables_to_check.append("important_transactions_distributed")
+            
         # MV option 3: Sum by months
         sum_create_query = get_table_if_exists(self.client, self.student_db, "sum_tot_month")
         
@@ -961,6 +883,7 @@ class ClickHouseChecker(LabChecker):
             )
             self.checker_report.include(saldo_mv_report)
             distributed_tables_to_check.append("users_saldos_distributed")
+            
         if mv_count < 2:
             error_msg = f"Found only {mv_count} materialized views. At least 2 are required."
             logger.error(error_msg)
@@ -969,10 +892,33 @@ class ClickHouseChecker(LabChecker):
                 reason=error_msg,
                 required=True
             )
+        
+        # Check queryability of all tables
+        tables = [
+            "transactions",
+            "transactions_distributed",
+            "avg_amount",
+            "important_transactions",
+            "sum_tot_month", 
+            "users_saldos"
+        ]
+        
+        validation_queries = []
+        for table in tables:
+            create_query = get_table_if_exists(self.client, self.student_db, table)
+            if create_query:
+                validation_queries.append(
+                    CheckableQuery(
+                        # TODO: at least verifye the count is not 0
+                        query=f"SELECT count() as count FROM {self.student_db}.{table} WHERE user_id = (SELECT user_id_out FROM {self.student_db}.transactions LIMIT 1) LIMIT 5",
+                        description=f"Check if {table} is queryable"
+                    )
+                )
             
         # Validate data by querying
-        self.execute_validation_queries()
+        self.execute_validation_queries(validation_queries)
 
+        # Check data distribution
         data_distribution_to_check = []
         for dtable in distributed_tables_to_check:
             table_report, create_query = check_table_exists(
