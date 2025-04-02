@@ -109,9 +109,10 @@ class CheckerService:
         Raises:
             ValueError: If task is in a status that cannot be cancelled
         """
-        task = get_task_with_isolation(task_id)
+        task = get_task(task_id)
+        current_status = task.status
         
-        if task.status == TaskStatus.CREATED.value:
+        if current_status == TaskStatus.CREATED.value:
             # Task hasn't started yet, just mark it as cancelled
             attempt = update_task_status_with_isolation(
                 task_id,
@@ -119,12 +120,22 @@ class CheckerService:
                 expected_status=TaskStatus.CREATED
             )
             if not attempt.is_success:
-                raise ValueError(f"Cannot cancel task: current status is {attempt.current_status}")
-        elif task.status == TaskStatus.RUNNING.value:
+                current_status = attempt.current_status
+            else:
+                logger.info(f"Task {task_id} was cancelled")
+                return
+        
+        if current_status == TaskStatus.RUNNING.value:
             # Task is running, mark it for cancellation
-            mark_task_cancelled(task_id)
-        else:
-            raise ValueError(f"Cannot cancel task in status {task.status}")
+            attempt = mark_task_cancelled(task_id)
+            if not attempt.is_success:
+                logger.warning(f"Cannot mark task {task_id} for cancellation: "
+                             f"current status is {attempt.current_status}")
+            else:
+                logger.info(f"Task {task_id} was marked for cancellation")
+            return
+        
+        logger.warning(f"Cannot cancel task in status {current_status}")
 
     def status(self, task_id: Union[str, uuid.UUID]) -> TaskResponse:
         """
