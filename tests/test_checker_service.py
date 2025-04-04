@@ -181,54 +181,76 @@ async def test_task_listing():
         
         # Mock the checking function to return quickly
         async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(0.1)  # Minimal delay
+            await asyncio.sleep(1.0)  # Minimal delay
             return CheckerReport(checks=[
                 Check(name="test_check", passed=True, message="Test passed")
             ])
         
         with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
-            # Create multiple tasks with different states
-            tasks = []
-            for status in [TaskStatus.CREATED, TaskStatus.RUNNING, TaskStatus.FINISHED]:
-                response = await service.submit(
-                    user_id="test_user",
-                    check_type=CheckType.CLICKHOUSE,
-                    args={"host": "localhost"},
-                    name=f"Test Task {status.value}",
-                    tag="test_tag"
-                )
-                tasks.append(response)
-                
-                # For RUNNING and FINISHED tasks, wait for appropriate state
-                if status == TaskStatus.RUNNING:
-                    await wait_for_status(service, response.id, TaskStatus.RUNNING)
-                elif status == TaskStatus.FINISHED:
-                    await wait_for_status(service, response.id, TaskStatus.FINISHED)
+            # Create tasks with different states
+            task_ids = {}
+
+            # Create a FINISHED task and wait for completion
+            finished_task = await service.submit(
+                user_id="test_user",
+                check_type=CheckType.CLICKHOUSE,
+                args={"host": "localhost"},
+                name="Test Task FINISHED",
+                tag="test_tag"
+            )
+            task_ids[TaskStatus.FINISHED] = finished_task.id
+            # Wait for it to reach FINISHED state
+            await wait_for_status(service, finished_task.id, TaskStatus.FINISHED)
+
+            running_task = await service.submit(
+                user_id="test_user",
+                check_type=CheckType.CLICKHOUSE,
+                args={"host": "localhost"},
+                name="Test Task RUNNING",
+                tag="test_tag"
+            )
+            task_ids[TaskStatus.RUNNING] = running_task.id
+            # Wait for it to reach RUNNING state
+            await wait_for_status(service, running_task.id, TaskStatus.RUNNING)
+            
+            # Create a CREATED task
+            created_task = await service.submit(
+                user_id="test_user",
+                check_type=CheckType.CLICKHOUSE,
+                args={"host": "localhost"},
+                name="Test Task CREATED",
+                tag="test_tag"
+            )
+            task_ids[TaskStatus.CREATED] = created_task.id
+            
+            # Verify all tasks have reached their expected states
+            for status, task_id in task_ids.items():
+                current_status = service.status(task_id)
+                assert current_status.status == status.value, f"Task {task_id} should be in {status.value} state, but is in {current_status.status}"
             
             # Test listing with different filters
             # 1. List all tasks
             all_tasks = service.list()
-            assert len(all_tasks) >= len(tasks)
+            assert len(all_tasks) >= len(task_ids), f"Expected at least {len(task_ids)} tasks, found {len(all_tasks)}"
             
             # 2. List by user
             user_tasks = service.list(user_id="test_user")
-            assert len(user_tasks) >= len(tasks)
+            assert len(user_tasks) >= len(task_ids)
             assert all(task.user_id == "test_user" for task in user_tasks)
             
             # 3. List by tag
             tagged_tasks = service.list(tag="test_tag")
-            assert len(tagged_tasks) >= len(tasks)
+            assert len(tagged_tasks) >= len(task_ids)
             assert all(task.tag == "test_tag" for task in tagged_tasks)
             
-            # 4. List by status
-            # Get current status of all tasks
-            current_statuses = {task.id: service.status(task.id).status for task in tasks}
-            
-            # Verify each status filter returns at least one task with that status
-            for status in [TaskStatus.CREATED, TaskStatus.RUNNING, TaskStatus.FINISHED]:
+            # 4. List by status - verify each status filter returns exactly the task with that status
+            for status in task_ids.keys():
                 status_tasks = service.list(status=status)
-                assert any(task.status == status.value for task in status_tasks), \
-                    f"No tasks found with status {status.value}. Current statuses: {current_statuses}"
+                # Check that our specific task with this status is in the results
+                task_ids_with_status = [task.id for task in status_tasks]
+                assert task_ids[status] in task_ids_with_status, f"Task with ID {task_ids[status]} not found in results for status {status.value}"
+                # Verify all tasks in this result have the correct status
+                assert all(task.status == status.value for task in status_tasks), f"Not all tasks have status {status.value}"
 
 
 @pytest.mark.asyncio
