@@ -1,12 +1,10 @@
--- Create a dummy table for demonstration
-CREATE TABLE IF NOT EXISTS dummy_table (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Create the grader database if it doesn't exist
+CREATE DATABASE grader
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'en_US.utf8'
+    LC_CTYPE = 'en_US.utf8'
+    TEMPLATE = template0
+    CONNECTION LIMIT = -1;
 
--- Insert some sample data
-INSERT INTO dummy_table (name) VALUES
-    ('First Entry'),
-    ('Second Entry'),
-    ('Third Entry'); 
