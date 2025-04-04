@@ -43,6 +43,8 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
 @broker.subscriber("test-queue")
 async def check(task: CheckingTask) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
+
+    allow_exceptions = os.environ.get("GRADER_ALLOW_EXCEPTIONS_IN_REPORT", "0") == "1"
     
     try:
         # We ensure that we starting task is not yet started or previously interrupted by some external event
@@ -61,18 +63,13 @@ async def check(task: CheckingTask) -> CheckingResult:
         
         # Create and start the checking task
         check_task = asyncio.create_task(run_check_with_cancellation(task))
+        check_task_delay = float(os.environ.get("GRADER_CHECK_TASK_DELAY", "0.2"))
         
         # Wait for completion or cancellation
         # TODO: verify the logic here and shield of cancellation with timeout works as expected
         while True:
-            try:
-                report = await asyncio.wait_for(asyncio.shield(check_task), timeout=5)
-            except asyncio.TimeoutError:
-                pass
-            except asyncio.CancelledError:
-                pass
-
-            if report is not None:
+            if check_task.done():
+                report = check_task.result()
                 break
             
             # Check if task was cancelled
@@ -90,6 +87,8 @@ async def check(task: CheckingTask) -> CheckingResult:
                 logger.info(f"Task {task.task_uid} was cancelled")
                 return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
         
+            await asyncio.sleep(check_task_delay)
+
         if report is None:  # Task was cancelled
             return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
             
@@ -102,9 +101,10 @@ async def check(task: CheckingTask) -> CheckingResult:
             status=TaskStatus.FINISHED,
             report=report.model_dump_json()
         )
+
         if not attempt.is_success:
-            logger.warning(f"Task {task.task_uid} cannot be marked as finished: "
-                         f"current status is {attempt.current_status}")
+            raise ValueError(f"Task {task.task_uid} cannot be marked as finished: "
+                             f"current status is {attempt.current_status}")
         
         logger.info(f"Successfully finished checking {task.task_uid}")
         return CheckingResult(task_uid=task.task_uid, report=report)
@@ -112,14 +112,15 @@ async def check(task: CheckingTask) -> CheckingResult:
     except Exception as e:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
         # Update status to failed with error message
+        fail_reason = str(e) if allow_exceptions else "Unexpected error happened during the check. Contact the administrator."
         attempt = update_task_status_with_isolation(
             task_id=task.task_uid,
             expected_status=TaskStatus.RUNNING,
             status=TaskStatus.FAILED,
-            report=CheckerReport(checks=[], fail_reason=str(e)).model_dump_json()
+            report=CheckerReport(checks=[], fail_reason=fail_reason).model_dump_json()
         )
         if not attempt.is_success:
-            logger.warning(f"Task {task.task_uid} cannot be marked as failed: "
+            logger.error(f"Task {task.task_uid} cannot be marked as failed: "
                          f"current status is {attempt.current_status}")
         raise
 
