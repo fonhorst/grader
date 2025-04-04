@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 DateTimeType = Optional[Union[str, float, datetime.datetime]]
 
-DB_CONN = os.environ.get(ENV_VAR_RUNNER_DB_CONN, 'postgresql://postgres:postgres@localhost:5432/wms')
+DB_CONN = os.environ.get(ENV_VAR_RUNNER_DB_CONN, 'postgresql://postgres:postgres@localhost:5432/grader')
 
 logger.warning("DB_CONN %s" % DB_CONN)
 
