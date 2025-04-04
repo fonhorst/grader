@@ -39,13 +39,14 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
     )
 
 
-# TODO: we need to add late ack here
 @broker.subscriber("test-queue")
 async def check(task: CheckingTask) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
 
     allow_exceptions = os.environ.get("GRADER_ALLOW_EXCEPTIONS_IN_REPORT", "0") == "1"
-    
+    check_task_delay = float(os.environ.get("GRADER_CHECK_TASK_DELAY", "0.2"))
+
+    check_task = None
     try:
         # We ensure that we starting task is not yet started or previously interrupted by some external event
         # We don't want to start the task if it is already in the FINISHED, FAILED or CANCELLED state
@@ -63,7 +64,6 @@ async def check(task: CheckingTask) -> CheckingResult:
         
         # Create and start the checking task
         check_task = asyncio.create_task(run_check_with_cancellation(task))
-        check_task_delay = float(os.environ.get("GRADER_CHECK_TASK_DELAY", "0.2"))
         
         # Wait for completion or cancellation
         # TODO: verify the logic here and shield of cancellation with timeout works as expected
@@ -113,14 +113,24 @@ async def check(task: CheckingTask) -> CheckingResult:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
         # Update status to failed with error message
         fail_reason = str(e) if allow_exceptions else "Unexpected error happened during the check. Contact the administrator."
-        attempt = update_task_status_with_isolation(
-            task_id=task.task_uid,
-            expected_status=TaskStatus.RUNNING,
-            status=TaskStatus.FAILED,
-            report=CheckerReport(checks=[], fail_reason=fail_reason).model_dump_json()
-        )
-        if not attempt.is_success:
-            logger.error(f"Task {task.task_uid} cannot be marked as failed: "
-                         f"current status is {attempt.current_status}")
+        try:
+            attempt = update_task_status_with_isolation(
+                task_id=task.task_uid,
+                expected_status=TaskStatus.RUNNING,
+                status=TaskStatus.FAILED,
+                report=CheckerReport(checks=[], fail_reason=fail_reason).model_dump_json()
+            )
+            if not attempt.is_success:
+                logger.warning(f"Task {task.task_uid} cannot be marked as failed: current status is {attempt.current_status}")
+            
+            # If we can't update the status, we should cancel the task
+            if check_task and not check_task.done():
+                check_task.cancel()
+        except Exception as e:
+            logger.error(f"Error updating task status for {task.task_uid} to FAILED: {str(e)}", exc_info=True)
+        
         raise
+    finally:
+        # Acknowledge the message only after all operations are complete
+        await broker.publisher.ack()
 
