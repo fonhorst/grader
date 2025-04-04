@@ -256,8 +256,82 @@ def update_task_status_with_isolation(
     task_id: Union[str, uuid.UUID],
     new_status: TaskStatus,
     expected_status: Optional[TaskStatus] = None,
-    report: Optional[str] = None
+    report: Optional[str] = None,
+    is_cancelled: Optional[bool] = None,
+    max_attempts: int = 3
 ) -> UpdateStatusAttempt:
+    """
+    Update task status in an isolated transaction.
+    
+    Args:
+        task_id: ID of the task to update
+        new_status: New status to set
+        expected_status: Optional status that the task should be in before update
+        report: Optional report to update
+        is_cancelled: Optional flag to set task as cancelled
+        max_attempts: Maximum number of retry attempts for operational errors
+        
+    Returns:
+        UpdateStatusAttempt with success status and current status if failed
+    """
+    attempt = 0
+    while attempt < max_attempts:
+        with SessionBuilder(bind=isolated_engine) as session:
+            try:
+                with session.begin():
+                    task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
+                    
+                    # Check if task is in expected status
+                    if expected_status is not None and task.status != expected_status.value:
+                        return UpdateStatusAttempt(
+                            is_success=False,
+                            current_status=TaskStatus(task.status)
+                        )
+                    
+                    curr_status = TaskStatus(task.status)
+                    if not TaskStatus.can_proceed(curr_status, new_status):
+                        return UpdateStatusAttempt(
+                            is_success=False,
+                            current_status=curr_status
+                        )
+
+                    dt = datetime.datetime.now()
+                    task.status = new_status.value
+                    task.status_updated_at = dt
+
+                    if TaskStatus.is_terminal(new_status):
+                        task.end_time = dt
+
+                    if report is not None:
+                        task.report = report
+                    
+                    if is_cancelled is not None:
+                        task.is_cancelled = is_cancelled
+
+                    # Store the result before committing
+                    return UpdateStatusAttempt(is_success=True)
+                    
+            except OperationalError as e:
+                attempt += 1
+                if attempt >= max_attempts:
+                    logger.warning(f"All {max_attempts} attempts to update task {task_id} failed with operational error: {str(e)}")
+                    break
+                else:
+                    logger.debug(f"Attempt {attempt} of {max_attempts} failed for task {task_id}: {str(e)}")
+                    continue
+            
+    # Try to get current status in a new transaction
+    try:
+        with SessionBuilder() as status_session:
+            task = status_session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            return UpdateStatusAttempt(is_success=False, current_status=TaskStatus(task.status))
+    except Exception as status_error:
+        logger.error(f"Failed to get current status for task {task_id} after all attempts failed: {str(status_error)}", exc_info=True)
+        raise  # Re-raise the original error if we can't get the current status
+
+def mark_task_cancelled(task_id: Union[str, uuid.UUID], expected_status: TaskStatus) -> UpdateStatusAttempt:
     """
     Update task status in an isolated transaction.
     
@@ -280,48 +354,8 @@ def update_task_status_with_isolation(
                     is_success=False,
                     current_status=TaskStatus(task.status)
                 )
-            
-            curr_status = TaskStatus(task.status)
-            if not TaskStatus.can_proceed(curr_status, new_status):
-                return UpdateStatusAttempt(
-                    is_success=False,
-                    current_status=curr_status
-                )
 
-            dt = datetime.datetime.now()
-            task.status = new_status.value
-            task.status_updated_at = dt
-
-            if TaskStatus.is_terminal(new_status):
-                task.end_time = dt
-
-            if report is not None:
-                task.report = report
-
-            return UpdateStatusAttempt(is_success=True)
-
-
-def mark_task_cancelled(task_id: Union[str, uuid.UUID]) -> UpdateStatusAttempt:
-    """
-    Mark task as cancelled by setting is_cancelled flag.
-    
-    Args:
-        task_id: ID of the task to mark as cancelled
-        
-    Returns:
-        UpdateStatusAttempt with success status and current status if failed
-    """
-    with SessionBuilder(bind=isolated_engine) as session:
-        with session.begin():
-            task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
-            
-            # Check if task is in RUNNING status
-            if task.status != TaskStatus.RUNNING.value:
-                return UpdateStatusAttempt(
-                    is_success=False,
-                    current_status=TaskStatus(task.status)
-                )
-            
             task.is_cancelled = True
+
             return UpdateStatusAttempt(is_success=True)
 

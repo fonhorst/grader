@@ -117,7 +117,8 @@ class CheckerService:
             attempt = update_task_status_with_isolation(
                 task_id,
                 new_status=TaskStatus.CANCELLED,
-                expected_status=TaskStatus.CREATED
+                expected_status=TaskStatus.CREATED,
+                is_cancelled=True
             )
             if not attempt.is_success:
                 current_status = attempt.current_status
@@ -127,7 +128,7 @@ class CheckerService:
         
         if current_status == TaskStatus.RUNNING.value:
             # Task is running, mark it for cancellation
-            attempt = mark_task_cancelled(task_id)
+            attempt = mark_task_cancelled(task_id, expected_status=TaskStatus.RUNNING)
             if not attempt.is_success:
                 logger.warning(f"Cannot mark task {task_id} for cancellation: "
                              f"current status is {attempt.current_status}")
