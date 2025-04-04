@@ -116,4 +116,190 @@ async def test_task_submit_negative():
             # 4. Parse and verify error report content
             report = CheckerReport.model_validate_json(failed_status.report)
             assert len(report.checks) == 0
-            assert report.fail_reason == str(test_error) 
+            assert report.fail_reason == str(test_error)
+
+
+@pytest.mark.asyncio
+async def test_task_cancellation():
+    """Test task cancellation during execution."""
+    async with TestRabbitBroker(broker) as br:
+        service = CheckerService(broker=br)
+        
+        # Test data
+        user_id = "test_user"
+        check_type = CheckType.CLICKHOUSE
+        args = {"host": "localhost", "user": "admin", "password": "admin"}
+        name = "Test Task"
+        tag = "test_tag"
+        
+        # Mock the checking function to simulate long-running task
+        async def mock_checking(*args, **kwargs):
+            await asyncio.sleep(2.0)  # Simulate long work
+            return CheckerReport(checks=[
+                Check(name="test_check", passed=True, message="Test passed")
+            ])
+        
+        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+            # 1. Submit task
+            response = await service.submit(
+                user_id=user_id,
+                check_type=check_type,
+                args=args,
+                name=name,
+                tag=tag
+            )
+            
+            # Verify initial state
+            assert isinstance(response, TaskResponse)
+            assert response.status == TaskStatus.CREATED.value
+            
+            # 2. Wait for task to start running
+            task_id = response.id
+            running_status = await wait_for_status(service, task_id, TaskStatus.RUNNING)
+            assert running_status is not None, "Task did not reach RUNNING state"
+            
+            # 3. Cancel the task
+            cancellation_result = await service.cancel(task_id)
+            assert cancellation_result is True, "Task cancellation failed"
+            
+            # 4. Wait for task to be cancelled
+            cancelled_status = await wait_for_status(service, task_id, TaskStatus.CANCELLED)
+            assert cancelled_status is not None, "Task did not reach CANCELLED state"
+            assert cancelled_status.report is not None
+            
+            # 5. Verify cancellation report
+            report = CheckerReport.model_validate_json(cancelled_status.report)
+            assert len(report.checks) == 0
+            assert "cancelled" in report.fail_reason.lower()
+
+
+@pytest.mark.asyncio
+async def test_task_listing():
+    """Test listing tasks with various filters."""
+    async with TestRabbitBroker(broker) as br:
+        service = CheckerService(broker=br)
+        
+        # Mock the checking function to return quickly
+        async def mock_checking(*args, **kwargs):
+            await asyncio.sleep(0.1)  # Minimal delay
+            return CheckerReport(checks=[
+                Check(name="test_check", passed=True, message="Test passed")
+            ])
+        
+        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+            # Create multiple tasks with different states
+            tasks = []
+            for status in [TaskStatus.CREATED, TaskStatus.RUNNING, TaskStatus.FINISHED]:
+                response = await service.submit(
+                    user_id="test_user",
+                    check_type=CheckType.CLICKHOUSE,
+                    args={"host": "localhost"},
+                    name=f"Test Task {status.value}",
+                    tag="test_tag"
+                )
+                tasks.append(response)
+                
+                # For RUNNING and FINISHED tasks, wait for appropriate state
+                if status == TaskStatus.RUNNING:
+                    await wait_for_status(service, response.id, TaskStatus.RUNNING)
+                elif status == TaskStatus.FINISHED:
+                    await wait_for_status(service, response.id, TaskStatus.FINISHED)
+            
+            # Test listing with different filters
+            # 1. List all tasks
+            all_tasks = service.list()
+            assert len(all_tasks) >= len(tasks)
+            
+            # 2. List by user
+            user_tasks = service.list(user_id="test_user")
+            assert len(user_tasks) >= len(tasks)
+            assert all(task.user_id == "test_user" for task in user_tasks)
+            
+            # 3. List by tag
+            tagged_tasks = service.list(tag="test_tag")
+            assert len(tagged_tasks) >= len(tasks)
+            assert all(task.tag == "test_tag" for task in tagged_tasks)
+            
+            # 4. List by status
+            # Get current status of all tasks
+            current_statuses = {task.id: service.status(task.id).status for task in tasks}
+            
+            # Verify each status filter returns at least one task with that status
+            for status in [TaskStatus.CREATED, TaskStatus.RUNNING, TaskStatus.FINISHED]:
+                status_tasks = service.list(status=status)
+                assert any(task.status == status.value for task in status_tasks), \
+                    f"No tasks found with status {status.value}. Current statuses: {current_statuses}"
+
+
+@pytest.mark.asyncio
+async def test_task_deletion():
+    """Test task deletion."""
+    async with TestRabbitBroker(broker) as br:
+        service = CheckerService(broker=br)
+        
+        # Mock the checking function to return quickly
+        async def mock_checking(*args, **kwargs):
+            await asyncio.sleep(1)  # Minimal delay
+            return CheckerReport(checks=[
+                Check(name="test_check", passed=True, message="Test passed")
+            ])
+        
+        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+            # Create a task
+            response = await service.submit(
+                user_id="test_user",
+                check_type=CheckType.CLICKHOUSE,
+                args={"host": "localhost"},
+                name="Test Task",
+                tag="test_tag"
+            )
+            
+            # Verify task exists
+            initial_status = service.status(response.id)
+            assert initial_status is not None
+            
+            # Delete the task
+            service.delete(response.id)
+            
+            # Verify task is deleted
+            try:
+                service.status(response.id)
+                pytest.fail("Task should not exist after deletion")
+            except ValueError:
+                pass  # Expected error when task doesn't exist
+
+
+@pytest.mark.asyncio
+async def test_delete_all_tasks():
+    """Test deleting all tasks."""
+    async with TestRabbitBroker(broker) as br:
+        service = CheckerService(broker=br)
+        
+        # Mock the checking function to return quickly
+        async def mock_checking(*args, **kwargs):
+            await asyncio.sleep(0.1)  # Minimal delay
+            return CheckerReport(checks=[
+                Check(name="test_check", passed=True, message="Test passed")
+            ])
+        
+        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+            # Create multiple tasks
+            for i in range(3):
+                await service.submit(
+                    user_id=f"test_user_{i}",
+                    check_type=CheckType.CLICKHOUSE,
+                    args={"host": "localhost"},
+                    name=f"Test Task {i}",
+                    tag=f"test_tag_{i}"
+                )
+            
+            # Verify tasks exist
+            initial_tasks = service.list()
+            assert len(initial_tasks) >= 3
+            
+            # Delete all tasks
+            service.delete_all()
+            
+            # Verify all tasks are deleted
+            remaining_tasks = service.list()
+            assert len(remaining_tasks) == 0 
