@@ -185,6 +185,7 @@ async def test_task_cancellation(clean_tasks_table):
 @pytest.mark.asyncio
 async def test_task_listing(clean_tasks_table):
     """Test listing tasks with various filters."""
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
@@ -265,6 +266,7 @@ async def test_task_listing(clean_tasks_table):
 @pytest.mark.asyncio
 async def test_task_deletion(clean_tasks_table):
     """Test task deletion."""
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
@@ -303,6 +305,7 @@ async def test_task_deletion(clean_tasks_table):
 @pytest.mark.asyncio
 async def test_delete_all_tasks(clean_tasks_table):
     """Test deleting all tasks."""
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
