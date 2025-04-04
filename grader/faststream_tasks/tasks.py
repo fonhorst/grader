@@ -45,11 +45,12 @@ async def check(task: CheckingTask) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
     
     try:
-        # Try to update status to running, ensuring task is in CREATED state
+        # We ensure that we starting task is not yet started or previously interrupted by some external event
+        # We don't want to start the task if it is already in the FINISHED, FAILED or CANCELLED state
         attempt = update_task_status_with_isolation(
-            task.task_uid,
-            new_status=TaskStatus.RUNNING,
-            expected_status=TaskStatus.CREATED
+            task_id=task.task_uid,
+            expected_status=[TaskStatus.CREATED, TaskStatus.RUNNING],
+            status=TaskStatus.RUNNING,
         )
 
         if not attempt.is_success:
@@ -79,9 +80,9 @@ async def check(task: CheckingTask) -> CheckingResult:
             if db_task.is_cancelled:
                 check_task.cancel()
                 attempt = update_task_status_with_isolation(
-                    task.task_uid,
-                    new_status=TaskStatus.CANCELLED,
-                    expected_status=TaskStatus.RUNNING
+                    task_id=task.task_uid,
+                    expected_status=TaskStatus.RUNNING,
+                    status=TaskStatus.CANCELLED
                 )
                 if not attempt.is_success:
                     logger.warning(f"Task {task.task_uid} cannot be cancelled: "
@@ -96,9 +97,9 @@ async def check(task: CheckingTask) -> CheckingResult:
         
         # Update status to finished with the report
         attempt = update_task_status_with_isolation(
-            task.task_uid,
-            new_status=TaskStatus.FINISHED,
+            task_id=task.task_uid,
             expected_status=TaskStatus.RUNNING,
+            status=TaskStatus.FINISHED,
             report=report.model_dump_json()
         )
         if not attempt.is_success:
@@ -112,9 +113,9 @@ async def check(task: CheckingTask) -> CheckingResult:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
         # Update status to failed with error message
         attempt = update_task_status_with_isolation(
-            task.task_uid,
-            new_status=TaskStatus.FAILED,
+            task_id=task.task_uid,
             expected_status=TaskStatus.RUNNING,
+            status=TaskStatus.FAILED,
             report=CheckerReport(checks=[], fail_reason=str(e)).model_dump_json()
         )
         if not attempt.is_success:

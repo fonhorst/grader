@@ -95,7 +95,7 @@ class CheckerService:
         # Get task and convert to response
         return TaskResponse.from_db_task(task)
 
-    async def cancel(self, task_id: Union[str, uuid.UUID]) -> None:
+    async def cancel(self, task_id: Union[str, uuid.UUID]) -> bool:
         """
         Cancel a task.
         
@@ -105,38 +105,31 @@ class CheckerService:
         
         Args:
             task_id: ID of the task to cancel
-            
-        Raises:
-            ValueError: If task is in a status that cannot be cancelled
-        """
-        task = get_task(task_id)
-        current_status = task.status
         
-        if current_status == TaskStatus.CREATED.value:
-            # Task hasn't started yet, just mark it as cancelled
-            attempt = update_task_status_with_isolation(
-                task_id,
-                new_status=TaskStatus.CANCELLED,
+        Returns:
+            True if the task was cancelled, False otherwise
+        """
+        attempt = update_task_status_with_isolation(
+                task_id=task_id,
                 expected_status=TaskStatus.CREATED,
+                status=TaskStatus.CANCELLED
+            )
+        
+        if not attempt.is_success and attempt.current_status == TaskStatus.RUNNING:
+            attempt = update_task_status_with_isolation(
+                task_id=task_id,
+                expected_status=TaskStatus.RUNNING,
                 is_cancelled=True
             )
-            if not attempt.is_success:
-                current_status = attempt.current_status
-            else:
-                logger.info(f"Task {task_id} was cancelled")
-                return
+
+        if not attempt.is_success:
+            logger.warning(f"Cannot mark task {task_id} for cancellation: "
+                            f"current status is {attempt.current_status}")
+                
+            return False
         
-        if current_status == TaskStatus.RUNNING.value:
-            # Task is running, mark it for cancellation
-            attempt = mark_task_cancelled(task_id, expected_status=TaskStatus.RUNNING)
-            if not attempt.is_success:
-                logger.warning(f"Cannot mark task {task_id} for cancellation: "
-                             f"current status is {attempt.current_status}")
-            else:
-                logger.info(f"Task {task_id} was marked for cancellation")
-            return
-        
-        logger.warning(f"Cannot cancel task in status {current_status}")
+        logger.info(f"Task {task_id} was cancelled")
+        return True
 
     def status(self, task_id: Union[str, uuid.UUID]) -> TaskResponse:
         """
