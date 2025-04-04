@@ -1,12 +1,24 @@
 import asyncio
 from typing import Optional
+import pytest
 
-from grader.db.tasks import TaskStatus
+from grader.db.tasks import TaskStatus, delete_all_tasks, list_tasks
 from grader.services.checker import CheckerService, TaskResponse
 import logging
 
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.fixture(scope="function")
+def clean_tasks_table():
+    """Clear all tasks from the database before each test and return count of remaining tasks."""
+    delete_all_tasks()
+    # Return the count of tasks after cleaning (should be 0)
+    remaining_tasks = len(list_tasks())
+    yield remaining_tasks
+    # Cleanup after test as well
+    delete_all_tasks()
 
 
 async def wait_for_status(

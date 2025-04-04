@@ -13,11 +13,17 @@ from grader.faststream_tasks.schemes import CheckingTask, CheckingResult
 from grader.faststream_tasks.tasks import broker
 from grader.services.checker import CheckerService, TaskResponse
 from tests.conftest import wait_for_status
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
-async def test_task_submit_positive():
+async def test_task_submit_positive(clean_tasks_table):
     """Test complete task lifecycle with successful execution."""
+
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
@@ -70,8 +76,10 @@ async def test_task_submit_positive():
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative():
+async def test_task_submit_negative(clean_tasks_table):
     """Test complete task lifecycle with failed execution."""
+
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
@@ -120,8 +128,9 @@ async def test_task_submit_negative():
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation():
+async def test_task_cancellation(clean_tasks_table):
     """Test task cancellation during execution."""
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
         
@@ -174,7 +183,7 @@ async def test_task_cancellation():
 
 
 @pytest.mark.asyncio
-async def test_task_listing():
+async def test_task_listing(clean_tasks_table):
     """Test listing tasks with various filters."""
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
@@ -254,7 +263,7 @@ async def test_task_listing():
 
 
 @pytest.mark.asyncio
-async def test_task_deletion():
+async def test_task_deletion(clean_tasks_table):
     """Test task deletion."""
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
@@ -292,7 +301,7 @@ async def test_task_deletion():
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks():
+async def test_delete_all_tasks(clean_tasks_table):
     """Test deleting all tasks."""
     async with TestRabbitBroker(broker) as br:
         service = CheckerService(broker=br)
@@ -325,3 +334,4 @@ async def test_delete_all_tasks():
             # Verify all tasks are deleted
             remaining_tasks = service.list()
             assert len(remaining_tasks) == 0 
+
