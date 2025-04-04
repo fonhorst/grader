@@ -10,16 +10,17 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship, joinedload
 
-from grader.env import ENV_VAR_RUNNER_DB_CONN, ENV_VAR_ECHO_DB_QUERY
+from grader.env import ENV_VAR_DB_CONN, ENV_VAR_ECHO_DB_QUERY
 
 logger = logging.getLogger(__name__)
 
 DateTimeType = Optional[Union[str, float, datetime.datetime]]
 
-DB_CONN = os.environ.get(ENV_VAR_RUNNER_DB_CONN, 'postgresql://postgres:postgres@localhost:5432/grader')
+DB_CONN = os.environ.get(ENV_VAR_DB_CONN, 'postgresql://postgres:postgres@localhost:5432/grader')
 
 logger.warning("DB_CONN %s" % DB_CONN)
 
+# TODO: move to async version
 engine = create_engine(DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "yes") == "yes")
 # https://docs.sqlalchemy.org/en/20/orm/sessionF_transaction.html#setting-isolation-for-individual-sessions
 isolated_engine = engine.execution_options(isolation_level="REPEATABLE READ")
