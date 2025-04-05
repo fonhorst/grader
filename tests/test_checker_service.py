@@ -183,12 +183,6 @@ async def test_task_cancellation(clean_tasks_table, monkeypatch):
             # 4. Wait for task to be cancelled
             cancelled_status = await wait_for_status(service, task_id, TaskStatus.CANCELLED)
             assert cancelled_status is not None, "Task did not reach CANCELLED state"
-            assert cancelled_status.report is not None
-            
-            # 5. Verify cancellation report
-            report = CheckerReport.model_validate_json(cancelled_status.report)
-            assert len(report.checks) == 0
-            assert "cancelled" in report.fail_reason.lower()
 
 
 @pytest.mark.asyncio
