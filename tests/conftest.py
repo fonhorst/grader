@@ -27,7 +27,7 @@ def clean_tasks_table():
     remaining_tasks = len(list_tasks())
     yield remaining_tasks
     # Cleanup after test as well
-    delete_all_tasks()
+    # delete_all_tasks()
 
 
 async def wait_for_status(
@@ -62,6 +62,7 @@ async def wait_for_status(
         # Get current status
         status = service.status(task_id)
         current_status = status.status
+        print(f"Status: {current_status}")
         if current_status == expected_status.value:
             return status
             

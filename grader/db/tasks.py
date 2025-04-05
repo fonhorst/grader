@@ -258,6 +258,7 @@ def list_tasks(
 
 
 def delete_all_tasks():
+    logger.info("Deleting all tasks")
     with SessionBuilder() as session:
         session.query(Task).delete()
         session.commit()
@@ -329,7 +330,7 @@ def update_task_status_with_isolation(*,
                         task.is_cancelled = is_cancelled
 
                     # Store the result before committing
-                    return UpdateStatusAttempt(is_success=True)
+                    return UpdateStatusAttempt(is_success=True, current_status=TaskStatus(task.status))
                     
             except OperationalError as e:
                 attempt += 1
@@ -350,33 +351,4 @@ def update_task_status_with_isolation(*,
     except Exception as status_error:
         logger.error(f"Failed to get current status for task {task_id} after all attempts failed: {str(status_error)}", exc_info=True)
         raise  # Re-raise the original error if we can't get the current status
-
-def mark_task_cancelled(task_id: Union[str, uuid.UUID], expected_status: TaskStatus) -> UpdateStatusAttempt:
-    """
-    Update task status in an isolated transaction.
-    
-    Args:
-        task_id: ID of the task to update
-        new_status: New status to set
-        expected_status: Optional status that the task should be in before update
-        report: Optional report to update
-        
-    Returns:
-        UpdateStatusAttempt with success status and current status if failed
-    """
-    
-    with SessionBuilder(bind=isolated_engine) as session:
-        with session.begin():
-            task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
-            
-            # Check if task is in expected status
-            if expected_status is not None and task.status != expected_status.value:
-                return UpdateStatusAttempt(
-                    is_success=False,
-                    current_status=TaskStatus(task.status)
-                )
-
-            task.is_cancelled = True
-
-            return UpdateStatusAttempt(is_success=True)
 

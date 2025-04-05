@@ -60,6 +60,8 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
                          f"Expected: {TaskStatus.CREATED}")
             return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
         
+        logger.info(f"Task {task.task_uid} change its state to: {attempt.current_status}")
+        
         # Create and start the checking task
         check_task = asyncio.create_task(run_check_with_cancellation(task))
         
