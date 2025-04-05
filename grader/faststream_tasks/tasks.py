@@ -2,7 +2,6 @@ import asyncio
 import functools
 import logging
 import os
-from typing import Optional
 
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
@@ -13,6 +12,7 @@ from grader.checking.checking import run_checking
 from grader.db.tasks import TaskStatus, get_task, update_task_status_with_isolation
 from grader.faststream_tasks.schemes import CheckingResult, CheckingTask
 
+used_run_checking = run_checking
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
         CheckerReport if successful, None if cancelled
     """
     # Run the synchronous checking function in a thread pool executor
-    func = functools.partial(run_checking, check_type=task.check_type, **task.args)
+    func = functools.partial(used_run_checking, check_type=task.check_type, **task.args)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, func)
 
@@ -70,6 +70,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         while True:
             if check_task.done():
                 report = check_task.result()
+                logger.info(f"Report: {report}")
                 break
             
             # Check if task was cancelled

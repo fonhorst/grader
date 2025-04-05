@@ -65,9 +65,11 @@ async def wait_for_status(
         # Get current status
         status = service.status(task_id)
         current_status = status.status
-        print(f"Status: {current_status}")
+        logger.debug(f"Obtained status: {current_status}")
         if current_status == expected_status.value:
             return status
             
         # Wait before next check
-        await asyncio.sleep(check_interval) 
+        await asyncio.sleep(check_interval)
+
+ 

@@ -1,3 +1,4 @@
+from time import sleep
 import pytest
 import asyncio
 from faststream.rabbit import TestRabbitBroker
@@ -39,12 +40,13 @@ async def test_task_submit_positive(clean_tasks_table, monkeypatch):
             CheckReport(required=True, passed=True, check_description="Test check")
         ])
         
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(0.5)  # Simulate work
+        def mock_checking(*args, **kwargs):
+            sleep(0.5)  # Simulate work
+            logger.debug(f"Mock checking function called: Args={args}, Kwargs={kwargs}")
             return mock_report
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # 1. Submit task
             response = await service.submit(

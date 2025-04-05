@@ -46,6 +46,7 @@ class TaskResponse(BaseModel):
         )
 
 
+# TODO: make it fully async
 class CheckerService:
     def __init__(self, broker: Optional[RabbitBroker] = None):
         self.broker = broker or broker
