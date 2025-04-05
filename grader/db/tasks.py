@@ -153,8 +153,9 @@ def create_task(
 ) -> Task:
     with SessionBuilder() as session:
         dt = datetime.datetime.now()
+        task_id = uid or uuid.uuid4()
         task = Task(
-            id=uid or uuid.uuid4(),
+            id=task_id,
             name=name,
             user_id=user_id,
             tag=tag,
@@ -165,8 +166,16 @@ def create_task(
         )
         session.add(task)
         session.commit()
-
-    return get_task(task.id)
+        
+        # Refresh the task in the current session to ensure we have a fully loaded object
+        task = session.get(Task, task_id)
+        if not task:
+            raise ValueError(f"Failed to create task with ID {task_id}")
+            
+        # Clone task attributes to avoid DetachedInstanceError
+        session.expunge(task)  # Detach from session without cascading to DB
+        
+        return task
 
 
 def get_task(task_id: Union[str, uuid.UUID]) -> Task:

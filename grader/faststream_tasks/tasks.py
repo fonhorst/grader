@@ -1,10 +1,12 @@
 import asyncio
+import functools
 import logging
 import os
 from typing import Optional
 
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
+from faststream.rabbit.annotations import RabbitMessage
 
 from grader.checking.base import CheckerReport
 from grader.checking.checking import run_checking
@@ -30,17 +32,13 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
         CheckerReport if successful, None if cancelled
     """
     # Run the synchronous checking function in a thread pool executor
+    func = functools.partial(run_checking, check_type=task.check_type, **task.args)
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
-        None,
-        run_checking,
-        task.check_type,
-        **task.args
-    )
+    return await loop.run_in_executor(None, func)
 
 
 @broker.subscriber("test-queue")
-async def check(task: CheckingTask) -> CheckingResult:
+async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
     logger.info(f"Starting to check {task.task_uid}")
 
     allow_exceptions = os.environ.get("GRADER_ALLOW_EXCEPTIONS_IN_REPORT", "0") == "1"
@@ -132,5 +130,5 @@ async def check(task: CheckingTask) -> CheckingResult:
         raise
     finally:
         # Acknowledge the message only after all operations are complete
-        await broker.publisher.ack()
+        await msg.ack()
 
