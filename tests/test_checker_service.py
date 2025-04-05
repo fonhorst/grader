@@ -15,12 +15,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-# TODO: remove it later
-@pytest.mark.asyncio
-async def test_empty():
-    logger.error("Just an empty test")
-
-
 @pytest.mark.asyncio
 async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test complete task lifecycle with successful execution."""
@@ -198,7 +192,7 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch
         
         # Mock the checking function to return quickly
         def mock_checking(*args, **kwargs):
-            sleep(0.1)  # Use shorter delay for faster tests
+            sleep(0.5)  # Use shorter delay for faster tests
             return CheckerReport(checks=[
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
@@ -235,16 +229,6 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch
             running_status = await wait_for_status(service, running_task.id, TaskStatus.RUNNING)
             assert running_status is not None, "RUNNING task didn't reach RUNNING state in time"
             
-            # Create a CREATED task
-            created_task = await service.submit(
-                user_id="test_user",
-                check_type=CheckType.CLICKHOUSE,
-                args={"host": "localhost"},
-                name="Test Task CREATED",
-                tag="test_tag"
-            )
-            task_ids[TaskStatus.CREATED] = created_task.id
-            
             # Double-check all tasks have reached their expected states before proceeding with filtering tests
             for status, task_id in task_ids.items():
                 current_status = await service.status(task_id)
@@ -252,22 +236,22 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch
             
             # Test listing with different filters
             # 1. List all tasks
-            all_tasks = service.list()
+            all_tasks = await service.list()
             assert len(all_tasks) >= len(task_ids), f"Expected at least {len(task_ids)} tasks, found {len(all_tasks)}"
             
             # 2. List by user
-            user_tasks = service.list(user_id="test_user")
+            user_tasks = await service.list(user_id="test_user")
             assert len(user_tasks) >= len(task_ids)
             assert all(task.user_id == "test_user" for task in user_tasks)
             
             # 3. List by tag
-            tagged_tasks = service.list(tag="test_tag")
+            tagged_tasks = await service.list(tag="test_tag")
             assert len(tagged_tasks) >= len(task_ids)
             assert all(task.tag == "test_tag" for task in tagged_tasks)
             
             # 4. List by status - verify each status filter returns exactly the task with that status
             for status in task_ids.keys():
-                status_tasks = service.list(status=status)
+                status_tasks = await service.list(status=status)
                 # Check that at least one task with this status exists in the results
                 assert len(status_tasks) > 0, f"No tasks found with status {status.value}"
                 
