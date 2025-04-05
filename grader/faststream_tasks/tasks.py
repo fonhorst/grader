@@ -8,7 +8,7 @@ from faststream.rabbit import RabbitBroker
 
 from grader.checking.base import CheckerReport
 from grader.checking.checking import run_checking
-from grader.db.tasks import TaskStatus, get_task, update_task_status_with_isolation, get_task_with_isolation
+from grader.db.tasks import TaskStatus, get_task, update_task_status_with_isolation
 from grader.faststream_tasks.schemes import CheckingResult, CheckingTask
 
 

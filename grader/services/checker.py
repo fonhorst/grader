@@ -8,9 +8,8 @@ from pydantic import BaseModel
 
 from grader.checking.checking import CheckType
 from grader.db.tasks import (
-    Task, TaskStatus, create_task, get_task, update_task_status,
-    delete_task, list_tasks, delete_all_tasks, get_task_with_isolation, update_task_status_with_isolation,
-    mark_task_cancelled
+    Task, TaskStatus, create_task, get_task,
+    delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
 )
 from grader.faststream_tasks.schemes import CheckingTask
 from grader.faststream_tasks.tasks import broker

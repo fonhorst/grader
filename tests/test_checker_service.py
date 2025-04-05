@@ -7,7 +7,8 @@ import asyncio
 from faststream.rabbit import TestRabbitBroker
 from sqlalchemy.exc import OperationalError
 
-from grader.checking.checking import CheckType, CheckerReport, Check
+from grader.checking.base import CheckReport
+from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus, UpdateStatusAttempt
 from grader.faststream_tasks.schemes import CheckingTask, CheckingResult
 from grader.faststream_tasks.tasks import broker
@@ -36,7 +37,7 @@ async def test_task_submit_positive(clean_tasks_table):
         
         # Mock the checking function to return a successful report after delay
         mock_report = CheckerReport(checks=[
-            Check(name="test_check", passed=True, message="Test passed")
+            CheckReport(required=True, passed=True, check_description="Test check")
         ])
         
         async def mock_checking(*args, **kwargs):
@@ -70,9 +71,9 @@ async def test_task_submit_positive(clean_tasks_table):
             # 4. Parse and verify report content
             report = CheckerReport.model_validate_json(finished_status.report)
             assert len(report.checks) == 1
-            assert report.checks[0].name == "test_check"
+            assert report.checks[0].check_description == "Test check"
             assert report.checks[0].passed is True
-            assert report.checks[0].message == "Test passed"
+            assert report.checks[0].required is True
 
 
 @pytest.mark.asyncio
@@ -145,7 +146,7 @@ async def test_task_cancellation(clean_tasks_table):
         async def mock_checking(*args, **kwargs):
             await asyncio.sleep(2.0)  # Simulate long work
             return CheckerReport(checks=[
-                Check(name="test_check", passed=True, message="Test passed")
+                CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
@@ -191,9 +192,9 @@ async def test_task_listing(clean_tasks_table):
         
         # Mock the checking function to return quickly
         async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(1.0)  # Minimal delay
+            await asyncio.sleep(0.1)  # Use shorter delay for faster tests
             return CheckerReport(checks=[
-                Check(name="test_check", passed=True, message="Test passed")
+                CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
@@ -210,8 +211,10 @@ async def test_task_listing(clean_tasks_table):
             )
             task_ids[TaskStatus.FINISHED] = finished_task.id
             # Wait for it to reach FINISHED state
-            await wait_for_status(service, finished_task.id, TaskStatus.FINISHED)
+            finished_status = await wait_for_status(service, finished_task.id, TaskStatus.FINISHED)
+            assert finished_status is not None, "FINISHED task didn't reach FINISHED state in time"
 
+            # Create a RUNNING task
             running_task = await service.submit(
                 user_id="test_user",
                 check_type=CheckType.CLICKHOUSE,
@@ -221,7 +224,8 @@ async def test_task_listing(clean_tasks_table):
             )
             task_ids[TaskStatus.RUNNING] = running_task.id
             # Wait for it to reach RUNNING state
-            await wait_for_status(service, running_task.id, TaskStatus.RUNNING)
+            running_status = await wait_for_status(service, running_task.id, TaskStatus.RUNNING)
+            assert running_status is not None, "RUNNING task didn't reach RUNNING state in time"
             
             # Create a CREATED task
             created_task = await service.submit(
@@ -233,7 +237,7 @@ async def test_task_listing(clean_tasks_table):
             )
             task_ids[TaskStatus.CREATED] = created_task.id
             
-            # Verify all tasks have reached their expected states
+            # Double-check all tasks have reached their expected states before proceeding with filtering tests
             for status, task_id in task_ids.items():
                 current_status = service.status(task_id)
                 assert current_status.status == status.value, f"Task {task_id} should be in {status.value} state, but is in {current_status.status}"
@@ -256,9 +260,13 @@ async def test_task_listing(clean_tasks_table):
             # 4. List by status - verify each status filter returns exactly the task with that status
             for status in task_ids.keys():
                 status_tasks = service.list(status=status)
+                # Check that at least one task with this status exists in the results
+                assert len(status_tasks) > 0, f"No tasks found with status {status.value}"
+                
                 # Check that our specific task with this status is in the results
                 task_ids_with_status = [task.id for task in status_tasks]
                 assert task_ids[status] in task_ids_with_status, f"Task with ID {task_ids[status]} not found in results for status {status.value}"
+                
                 # Verify all tasks in this result have the correct status
                 assert all(task.status == status.value for task in status_tasks), f"Not all tasks have status {status.value}"
 
@@ -274,7 +282,7 @@ async def test_task_deletion(clean_tasks_table):
         async def mock_checking(*args, **kwargs):
             await asyncio.sleep(1)  # Minimal delay
             return CheckerReport(checks=[
-                Check(name="test_check", passed=True, message="Test passed")
+                CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
@@ -313,7 +321,7 @@ async def test_delete_all_tasks(clean_tasks_table):
         async def mock_checking(*args, **kwargs):
             await asyncio.sleep(0.1)  # Minimal delay
             return CheckerReport(checks=[
-                Check(name="test_check", passed=True, message="Test passed")
+                CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
