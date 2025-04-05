@@ -307,11 +307,11 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatc
             )
             
             # Verify task exists
-            initial_status = service.status(response.id)
+            initial_status = await service.status(response.id)
             assert initial_status is not None
             
             # Delete the task
-            service.delete(response.id)
+            await service.delete(response.id)
             
             # Verify task is deleted
             try:
