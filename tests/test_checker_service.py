@@ -356,7 +356,7 @@ async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, monkeyp
             assert len(initial_tasks) >= 3
             
             # Delete all tasks
-            service.delete_all()
+            await service.delete_all()
             
             # Verify all tasks are deleted
             remaining_tasks = await service.list()
