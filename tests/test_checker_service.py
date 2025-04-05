@@ -247,7 +247,7 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch
             
             # Double-check all tasks have reached their expected states before proceeding with filtering tests
             for status, task_id in task_ids.items():
-                current_status = service.status(task_id)
+                current_status = await service.status(task_id)
                 assert current_status.status == status.value, f"Task {task_id} should be in {status.value} state, but is in {current_status.status}"
             
             # Test listing with different filters

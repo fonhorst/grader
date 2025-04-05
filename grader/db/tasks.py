@@ -6,7 +6,7 @@ import uuid
 from typing import Optional, Dict, Union, Any, List, cast, Tuple
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy import String, UUID, TIMESTAMP, ForeignKey, inspect
+from sqlalchemy import String, UUID, TIMESTAMP, ForeignKey, delete, inspect, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, joinedload
@@ -23,11 +23,20 @@ ASYNC_DB_CONN = DB_CONN.replace('postgresql://', 'postgresql+asyncpg://')
 
 logger.warning("DB_CONN %s" % ASYNC_DB_CONN)
 
-# Create async engine and session maker
-engine = create_async_engine(ASYNC_DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "no") == "yes")
+# Create async engine and session maker with proper connection pooling
+engine = create_async_engine(
+    ASYNC_DB_CONN, 
+    echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "no") == "yes",
+    # Configure pool parameters to help prevent interface errors
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
+    pool_recycle=3600
+)
+
 # https://docs.sqlalchemy.org/en/20/orm/sessionF_transaction.html#setting-isolation-for-individual-sessions
 isolated_engine = engine.execution_options(isolation_level="REPEATABLE READ")
-AsyncSessionBuilder = async_sessionmaker(engine)
+AsyncSessionBuilder = async_sessionmaker(engine, expire_on_commit=False)
 
 class ImpossibleTaskStatusTransition(Exception):
     pass
@@ -113,6 +122,7 @@ async def create_tables() -> bool:
     logger.info("Creating required tables")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    return True
 
 
 def _standartize_datetime(dt: DateTimeType) -> datetime.datetime:
@@ -147,29 +157,27 @@ async def create_task(
     submit_time: Optional[datetime.datetime] = None
 ) -> Task:
     async with AsyncSessionBuilder() as session:
-        dt = datetime.datetime.now()
-        task_id = uid or uuid.uuid4()
-        task = Task(
-            id=task_id,
-            name=name,
-            user_id=user_id,
-            tag=tag,
-            attachment=attachment,
-            status=TaskStatus.CREATED.value,
-            status_updated_at=submit_time or dt,
-            submit_time=submit_time or dt
-        )
-        session.add(task)
-        await session.commit()
+        async with session.begin():
+            dt = datetime.datetime.now()
+            task_id = uid or uuid.uuid4()
+            task = Task(
+                id=task_id,
+                name=name,
+                user_id=user_id,
+                tag=tag,
+                attachment=attachment,
+                status=TaskStatus.CREATED.value,
+                status_updated_at=submit_time or dt,
+                submit_time=submit_time or dt
+            )
+            session.add(task)
         
-        # Refresh the task in the current session to ensure we have a fully loaded object
+        # Get task in a new transaction to ensure it's detached properly
         task = await session.get(Task, task_id)
         if not task:
             raise ValueError(f"Failed to create task with ID {task_id}")
-            
-        # Clone task attributes to avoid DetachedInstanceError
-        await session.expunge(task)  # Detach from session without cascading to DB
         
+        # Make a detached copy to avoid any session-related issues
         return task
 
 
@@ -189,7 +197,7 @@ async def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus)
             while attempt < max_retries:
                 try:
                     stmt = await session.execute(
-                        session.query(Task).filter(Task.id == task_id).with_for_update()
+                        select(Task).where(Task.id == task_id).with_for_update()
                     )
                     task = stmt.scalar_one()
                     curr_status = TaskStatus(task.status)
@@ -222,10 +230,10 @@ async def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus)
 
 async def delete_task(task_id: Union[str, uuid.UUID]):
     async with AsyncSessionBuilder() as session:
-        task = await session.get(Task, task_id)
-        if task:
-            await session.delete(task)
-            await session.commit()
+        async with session.begin():
+            task = await session.get(Task, task_id)
+            if task:
+                await session.delete(task)
 
 
 async def list_tasks(
@@ -236,7 +244,7 @@ async def list_tasks(
         statuses: Optional[List[str]] = None,
         submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None) -> List[Task]:
     async with AsyncSessionBuilder() as session:
-        query = session.query(Task)
+        query = select(Task)
 
         filters = []
         if uids:
@@ -259,7 +267,7 @@ async def list_tasks(
                 filters.append(Task.submit_time <= _standartize_datetime(end))
 
         if filters:
-            query = query.filter(*filters)
+            query = query.where(*filters)
 
         result = await session.execute(query)
         return list(result.scalars().all())
@@ -267,8 +275,8 @@ async def list_tasks(
 
 async def delete_all_tasks():
     async with AsyncSessionBuilder() as session:
-        await session.execute(session.query(Task).delete())
-        await session.commit()
+        async with session.begin():
+            await session.execute(delete(Task))
 
 
 class UpdateStatusAttempt:
@@ -310,7 +318,7 @@ async def update_task_status_with_isolation(*,
             async with AsyncSessionBuilder(bind=isolated_engine) as session:
                 async with session.begin():
                     stmt = await session.execute(
-                        session.query(Task).filter(Task.id == task_id).with_for_update()
+                        select(Task).where(Task.id == task_id).with_for_update()
                     )
                     
                     task = stmt.scalar_one()
@@ -339,7 +347,7 @@ async def update_task_status_with_isolation(*,
                     if is_cancelled is not None:
                         task.is_cancelled = is_cancelled
                     
-                    await session.commit()
+                    # Commit is handled by the session.begin() context
                     return UpdateStatusAttempt(is_success=True, current_status=curr_status)
         
         except OperationalError:
