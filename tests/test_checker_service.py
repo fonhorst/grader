@@ -22,11 +22,11 @@ async def test_empty():
 
 
 @pytest.mark.asyncio
-async def test_task_submit_positive(clean_tasks_table, monkeypatch):
+async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test complete task lifecycle with successful execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
@@ -82,10 +82,11 @@ async def test_task_submit_positive(clean_tasks_table, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative(clean_tasks_table, monkeypatch):
+async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test complete task lifecycle with failed execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
@@ -136,9 +137,10 @@ async def test_task_submit_negative(clean_tasks_table, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation(clean_tasks_table, monkeypatch):
+async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test task cancellation during execution."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
@@ -187,9 +189,10 @@ async def test_task_cancellation(clean_tasks_table, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_task_listing(clean_tasks_table, monkeypatch):
+async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test listing tasks with various filters."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
@@ -277,9 +280,10 @@ async def test_task_listing(clean_tasks_table, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_task_deletion(clean_tasks_table, monkeypatch):
+async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test task deletion."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
@@ -320,9 +324,10 @@ async def test_task_deletion(clean_tasks_table, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks(clean_tasks_table, monkeypatch):
+async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
     """Test deleting all tasks."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         

@@ -17,10 +17,10 @@ used_run_checking = run_checking
 
 logger = logging.getLogger(__name__)
 
-broker = RabbitBroker(os.environ.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:admin@localhost:5672/")) 
-
+broker_queue_name = os.environ.get("GRADER_FASTSTREAM_BROKER_QUEUE", "test-queue")
+broker_url = os.environ.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:admin@localhost:5672/")
+broker = RabbitBroker(broker_url) 
 app = FastStream(broker)
-
 
 UNEXPECTED_ERROR_MESSAGE = "Unexpected error happened during the check. Contact the administrator."
 
@@ -41,7 +41,7 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
     return await loop.run_in_executor(None, func)
 
 
-@broker.subscriber("test-queue")
+@broker.subscriber(broker_queue_name)
 async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResult]:
     logger.info(f"Starting to check {task.task_uid}")
 
