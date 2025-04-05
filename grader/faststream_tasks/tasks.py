@@ -62,32 +62,36 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         
         logger.info(f"Task {task.task_uid} change its state to: {attempt.current_status}")
         
-        # Create and start the checking task
-        check_task = asyncio.create_task(run_check_with_cancellation(task))
+        await asyncio.sleep(10)
+
+        # # Create and start the checking task
+        # check_task = asyncio.create_task(run_check_with_cancellation(task))
         
-        # Wait for completion or cancellation
-        # TODO: verify the logic here and shield of cancellation with timeout works as expected
-        while True:
-            if check_task.done():
-                report = check_task.result()
-                break
+        # # Wait for completion or cancellation
+        # # TODO: verify the logic here and shield of cancellation with timeout works as expected
+        # while True:
+        #     if check_task.done():
+        #         report = check_task.result()
+        #         break
             
-            # Check if task was cancelled
-            db_task = get_task(task.task_uid)
-            if db_task.is_cancelled:
-                check_task.cancel()
-                attempt = update_task_status_with_isolation(
-                    task_id=task.task_uid,
-                    expected_status=TaskStatus.RUNNING,
-                    status=TaskStatus.CANCELLED
-                )
-                if not attempt.is_success:
-                    logger.warning(f"Task {task.task_uid} cannot be cancelled: "
-                                 f"current status is {attempt.current_status}")
-                logger.info(f"Task {task.task_uid} was cancelled")
-                return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
+        #     # Check if task was cancelled
+        #     db_task = get_task(task.task_uid)
+        #     if db_task.is_cancelled:
+        #         check_task.cancel()
+        #         attempt = update_task_status_with_isolation(
+        #             task_id=task.task_uid,
+        #             expected_status=TaskStatus.RUNNING,
+        #             status=TaskStatus.CANCELLED
+        #         )
+        #         if not attempt.is_success:
+        #             logger.warning(f"Task {task.task_uid} cannot be cancelled: "
+        #                          f"current status is {attempt.current_status}")
+        #         logger.info(f"Task {task.task_uid} was cancelled")
+        #         return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))
         
-            await asyncio.sleep(check_task_delay)
+            # await asyncio.sleep(check_task_delay)
+        
+        report = CheckerReport(checks=[])
 
         if report is None:  # Task was cancelled
             return CheckingResult(task_uid=task.task_uid, report=CheckerReport(checks=[]))

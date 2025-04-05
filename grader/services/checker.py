@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any, Union
 import uuid
@@ -90,6 +91,9 @@ class CheckerService:
         
         # Send task to queue
         await self.broker.publish(checking_task, "test-queue")
+        # asyncio.create_task(self.broker.publish(checking_task, "test-queue"))
+
+        logger.info(f"Task {task.id} sent to queue")
         
         # Get task and convert to response
         return TaskResponse.from_db_task(task)

@@ -24,7 +24,7 @@ async def test_task_submit_positive(clean_tasks_table, monkeypatch):
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
 
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Test data
