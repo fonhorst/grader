@@ -315,7 +315,7 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatc
             
             # Verify task is deleted
             try:
-                service.status(response.id)
+                await service.status(response.id)
                 pytest.fail("Task should not exist after deletion")
             except ValueError:
                 pass  # Expected error when task doesn't exist
@@ -352,14 +352,14 @@ async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, monkeyp
                 )
             
             # Verify tasks exist
-            initial_tasks = service.list()
+            initial_tasks = await service.list()
             assert len(initial_tasks) >= 3
             
             # Delete all tasks
             service.delete_all()
             
             # Verify all tasks are deleted
-            remaining_tasks = service.list()
+            remaining_tasks = await service.list()
             assert len(remaining_tasks) == 0
 
             logger.info(f"Waiting for 2 seconds to ensure that all tasks have been processed")
