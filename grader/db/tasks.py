@@ -21,11 +21,10 @@ DB_CONN = os.environ.get(ENV_VAR_DB_CONN, 'postgresql://postgres:postgres@localh
 logger.warning("DB_CONN %s" % DB_CONN)
 
 # TODO: move to async version
-engine = create_engine(DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "yes") == "yes")
+engine = create_engine(DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "no") == "yes")
 # https://docs.sqlalchemy.org/en/20/orm/sessionF_transaction.html#setting-isolation-for-individual-sessions
 isolated_engine = engine.execution_options(isolation_level="REPEATABLE READ")
 SessionBuilder = sessionmaker(engine)
-
 
 class ImpossibleTaskStatusTransition(Exception):
     pass
@@ -103,23 +102,15 @@ class Task(Base):
         return f"Task(id={self.id!r}, user_id={self.user_id!r}, name={self.name!r}, status={self.status!r})"
 
 
-def create_tasks_table() -> bool:
+def create_tables() -> bool:
     """
     Create the tasks table if it doesn't exist.
     Returns True if the table was created, False if it already existed.
     """
-    logger.info("Checking if tasks table exists")
-    inspector = inspect(engine)
-    if not inspector.has_table("tasks"):
-        logger.info("Creating tasks table")
-        Base.metadata.create_all(engine)
-        return True
-    else:
-        logger.info("Tasks table already exists")
-        return False
+    logger.info("Creating required tables")
+    Base.metadata.create_all(engine, checkfirst=True)
 
 
-# TODO: revise the implementation of all functions below this line, refactor the code to synchronize them with the change in the classes above in this file
 def _standartize_datetime(dt: DateTimeType) -> datetime.datetime:
     if isinstance(dt, str):
         dt = datetime.datetime.fromisoformat(dt)

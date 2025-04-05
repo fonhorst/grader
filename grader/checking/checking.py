@@ -38,10 +38,10 @@ def main():
     args = parser.parse_args()
     
     # Configure file logging if requested
-    if args.log_file:
-        file_handler = logging.FileHandler(args.log_file)
-        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        logger.addHandler(file_handler)
+    # if args.log_file:
+    #     file_handler = logging.FileHandler(args.log_file)
+    #     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    #     logger.addHandler(file_handler)
     
     # Get password securely
     password = input(f"Enter ClickHouse password for {args.user}: ")

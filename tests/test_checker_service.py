@@ -1,16 +1,10 @@
 import pytest
-import uuid
-from datetime import datetime
-from unittest.mock import patch, AsyncMock
 import asyncio
-
 from faststream.rabbit import TestRabbitBroker
-from sqlalchemy.exc import OperationalError
 
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
-from grader.db.tasks import TaskStatus, UpdateStatusAttempt
-from grader.faststream_tasks.schemes import CheckingTask, CheckingResult
+from grader.db.tasks import TaskStatus
 from grader.faststream_tasks.tasks import broker
 from grader.services.checker import CheckerService, TaskResponse
 from tests.conftest import wait_for_status
@@ -20,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
-async def test_empty(clean_tasks_table):
+async def test_empty():
     logger.error("Just an empty test")
 
 
 @pytest.mark.asyncio
-async def test_task_submit_positive(clean_tasks_table):
+async def test_task_submit_positive(clean_tasks_table, monkeypatch):
     """Test complete task lifecycle with successful execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
@@ -49,7 +43,9 @@ async def test_task_submit_positive(clean_tasks_table):
             await asyncio.sleep(0.5)  # Simulate work
             return mock_report
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # 1. Submit task
             response = await service.submit(
                 user_id=user_id,
@@ -82,7 +78,7 @@ async def test_task_submit_positive(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative(clean_tasks_table):
+async def test_task_submit_negative(clean_tasks_table, monkeypatch):
     """Test complete task lifecycle with failed execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
@@ -103,7 +99,9 @@ async def test_task_submit_negative(clean_tasks_table):
             await asyncio.sleep(0.5)  # Simulate work
             raise test_error
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # 1. Submit task
             response = await service.submit(
                 user_id=user_id,
@@ -134,7 +132,7 @@ async def test_task_submit_negative(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation(clean_tasks_table):
+async def test_task_cancellation(clean_tasks_table, monkeypatch):
     """Test task cancellation during execution."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
@@ -154,7 +152,9 @@ async def test_task_cancellation(clean_tasks_table):
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # 1. Submit task
             response = await service.submit(
                 user_id=user_id,
@@ -189,7 +189,7 @@ async def test_task_cancellation(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_task_listing(clean_tasks_table):
+async def test_task_listing(clean_tasks_table, monkeypatch):
     """Test listing tasks with various filters."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
@@ -202,7 +202,9 @@ async def test_task_listing(clean_tasks_table):
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # Create tasks with different states
             task_ids = {}
 
@@ -277,7 +279,7 @@ async def test_task_listing(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_task_deletion(clean_tasks_table):
+async def test_task_deletion(clean_tasks_table, monkeypatch):
     """Test task deletion."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
@@ -290,7 +292,9 @@ async def test_task_deletion(clean_tasks_table):
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # Create a task
             response = await service.submit(
                 user_id="test_user",
@@ -316,7 +320,7 @@ async def test_task_deletion(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks(clean_tasks_table):
+async def test_delete_all_tasks(clean_tasks_table, monkeypatch):
     """Test deleting all tasks."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     async with TestRabbitBroker(broker) as br:
@@ -329,7 +333,9 @@ async def test_delete_all_tasks(clean_tasks_table):
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
-        with patch('grader.checking.checking.run_checking', side_effect=mock_checking):
+        with monkeypatch.context() as m:
+            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            
             # Create multiple tasks
             for i in range(3):
                 await service.submit(

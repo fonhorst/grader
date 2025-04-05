@@ -1,19 +1,27 @@
 import asyncio
 from typing import Optional
 import pytest
-
-from grader.db.tasks import TaskStatus, create_tasks_table, delete_all_tasks, list_tasks
-from grader.services.checker import CheckerService, TaskResponse
 import logging
+
+from grader.db.tasks import TaskStatus, create_tables, delete_all_tasks, list_tasks
+from grader.services.checker import CheckerService, TaskResponse
 
 
 logger = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def configure_sqlalchemy_logging():
+    """Configure SQLAlchemy logging to WARN level to reduce test output noise."""
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    # You can add other loggers that need to be silenced here
+    return None
+
+
 @pytest.fixture(scope="function")
 def clean_tasks_table():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
-    create_tasks_table()
+    create_tables()
     delete_all_tasks()
     # Return the count of tasks after cleaning (should be 0)
     remaining_tasks = len(list_tasks())
