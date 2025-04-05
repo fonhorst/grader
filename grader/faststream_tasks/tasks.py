@@ -2,6 +2,7 @@ import asyncio
 import functools
 import logging
 import os
+from typing import Optional
 
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
@@ -41,7 +42,7 @@ async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
 
 
 @broker.subscriber("test-queue")
-async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
+async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResult]:
     logger.info(f"Starting to check {task.task_uid}")
 
     allow_exceptions = os.environ.get("GRADER_ALLOW_EXCEPTIONS_IN_REPORT", "0") == "1"
@@ -114,7 +115,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         return CheckingResult(task_uid=task.task_uid, report=report)
         
     except Exception as ex:
-        logger.error(f"Error checking {task.task_uid}: {str(ex)}", exc_info=True)
+        logger.error(f"Error checking {task.task_uid}: {str(ex)}")#, exc_info=True)
         # Update status to failed with error message
         fail_reason = str(ex) if allow_exceptions else UNEXPECTED_ERROR_MESSAGE
         try:
@@ -131,9 +132,10 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
             if check_task and not check_task.done():
                 check_task.cancel()
         except Exception as e:
-            logger.error(f"Error updating task status for {task.task_uid} to FAILED: {str(e)}", exc_info=True)
+            logger.error(f"Error updating task status for {task.task_uid} to FAILED: {str(e)}")#, exc_info=True)
         
         # raise FastStreamCheckTaskException("FastStream 'check' handler failed") from ex
+        return None
     finally:
         # Acknowledge the message only after all operations are complete
         logger.info(f"Acknowledging message for {task.task_uid}")
