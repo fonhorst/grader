@@ -18,6 +18,9 @@ def configure_sqlalchemy_logging():
     return None
 
 
+# TODO: add cleaning of rabbitmq test-queue
+
+
 @pytest.fixture(scope="function")
 def clean_tasks_table():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
