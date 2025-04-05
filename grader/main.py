@@ -3,7 +3,7 @@ import logging
 from grader.app import app
 from grader.tasks.app import make_app
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)")
+# logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)")
 
 
 # pylint: disable=unused-import

@@ -6,6 +6,8 @@ from grader.db.tasks import TaskStatus, create_tasks_table, delete_all_tasks, li
 from grader.services.checker import CheckerService, TaskResponse
 import logging
 
+logging.basicConfig(level=logging.ERROR)
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,9 @@ logger = logging.getLogger(__name__)
 @pytest.fixture(scope="function")
 def clean_tasks_table():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
+    # logging.getLogger('sqlalchemy.engine.Engine').setLevel(logging.WARNING)
+    # logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+    # logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
     create_tasks_table()
     delete_all_tasks()
     # Return the count of tasks after cleaning (should be 0)

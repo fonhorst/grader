@@ -10,15 +10,6 @@ from typing import List, Optional, Tuple, Any, Dict
 
 from grader.checking.base import CheckableQuery, CheckerReport
 
-
-# Configure logger
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
 logger = logging.getLogger(__name__)
 
 
