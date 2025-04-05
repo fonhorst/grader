@@ -136,5 +136,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         raise
     finally:
         # Acknowledge the message only after all operations are complete
+        logger.info(f"Acknowledging message for {task.task_uid}")
         await msg.ack()
+        logger.info(f"Message for {task.task_uid} acknowledged")
 

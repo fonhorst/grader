@@ -6,7 +6,7 @@ from faststream.rabbit import TestRabbitBroker
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
-from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker
+from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker, check
 from grader.services.checker import CheckerService, TaskResponse
 from tests.conftest import wait_for_status
 import logging
@@ -138,7 +138,7 @@ async def test_task_submit_negative(clean_tasks_table, monkeypatch):
 async def test_task_cancellation(clean_tasks_table, monkeypatch):
     """Test task cancellation during execution."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Test data
@@ -149,14 +149,14 @@ async def test_task_cancellation(clean_tasks_table, monkeypatch):
         tag = "test_tag"
         
         # Mock the checking function to simulate long-running task
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(2.0)  # Simulate long work
+        def mock_checking(*args, **kwargs):
+            sleep(2.0)  # Simulate long work
             return CheckerReport(checks=[
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # 1. Submit task
             response = await service.submit(
@@ -195,18 +195,18 @@ async def test_task_cancellation(clean_tasks_table, monkeypatch):
 async def test_task_listing(clean_tasks_table, monkeypatch):
     """Test listing tasks with various filters."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Mock the checking function to return quickly
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(0.1)  # Use shorter delay for faster tests
+        def mock_checking(*args, **kwargs):
+            sleep(0.1)  # Use shorter delay for faster tests
             return CheckerReport(checks=[
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # Create tasks with different states
             task_ids = {}
@@ -285,18 +285,18 @@ async def test_task_listing(clean_tasks_table, monkeypatch):
 async def test_task_deletion(clean_tasks_table, monkeypatch):
     """Test task deletion."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Mock the checking function to return quickly
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(1)  # Minimal delay
+        def mock_checking(*args, **kwargs):
+            sleep(1)  # Minimal delay
             return CheckerReport(checks=[
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # Create a task
             response = await service.submit(
@@ -321,23 +321,25 @@ async def test_task_deletion(clean_tasks_table, monkeypatch):
             except ValueError:
                 pass  # Expected error when task doesn't exist
 
+            await check.wait_call(timeout=5)
+
 
 @pytest.mark.asyncio
 async def test_delete_all_tasks(clean_tasks_table, monkeypatch):
     """Test deleting all tasks."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Mock the checking function to return quickly
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(0.1)  # Minimal delay
+        def mock_checking(*args, **kwargs):
+            sleep(0.1)  # Minimal delay
             return CheckerReport(checks=[
                 CheckReport(required=True, passed=True, check_description="Test check")
             ])
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # Create multiple tasks
             for i in range(3):
