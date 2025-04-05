@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
+async def test_empty(clean_tasks_table):
+    logger.error("Just an empty test")
+
+
+@pytest.mark.asyncio
 async def test_task_submit_positive(clean_tasks_table):
     """Test complete task lifecycle with successful execution."""
 
