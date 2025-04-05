@@ -321,6 +321,7 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatc
                 pass  # Expected error when task doesn't exist
 
             await check.wait_call(timeout=5)
+            await asyncio.sleep(2)
 
 
 @pytest.mark.asyncio
@@ -360,11 +361,7 @@ async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, monkeyp
             
             # Verify all tasks are deleted
             remaining_tasks = service.list()
-            assert len(remaining_tasks) == 0 
-
-            # Wait for all mock calls to complete (expecting 3 calls, one for each task)
-            start_time = asyncio.get_event_loop().time()
-            timeout = 5.0
+            assert len(remaining_tasks) == 0
 
             logger.info(f"Waiting for 2 seconds to ensure that all tasks have been processed")
             await asyncio.sleep(2)

@@ -68,7 +68,8 @@ async def clean_rabbitmq_queue():
         
         # Purge the queue after the test
         await queue.purge()
-        logger.info(f"Cleaned RabbitMQ queue '{queue_name}' after test")
+        
+        logger.info(f"Cleaned RabbitMQ queue '{broker_queue_name}' after test")
         
     finally:
         # Close the connection
