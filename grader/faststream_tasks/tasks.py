@@ -52,7 +52,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResu
     try:
         # We ensure that we starting task is not yet started or previously interrupted by some external event
         # We don't want to start the task if it is already in the FINISHED, FAILED or CANCELLED state
-        attempt = update_task_status_with_isolation(
+        attempt = await update_task_status_with_isolation(
             task_id=task.task_uid,
             expected_status=[TaskStatus.CREATED, TaskStatus.RUNNING],
             status=TaskStatus.RUNNING,
@@ -78,10 +78,10 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResu
                 break
             
             # Check if task was cancelled
-            db_task = get_task(task.task_uid)
+            db_task = await get_task(task.task_uid)
             if db_task.is_cancelled:
                 check_task.cancel()
-                attempt = update_task_status_with_isolation(
+                attempt = await update_task_status_with_isolation(
                     task_id=task.task_uid,
                     expected_status=TaskStatus.RUNNING,
                     status=TaskStatus.CANCELLED
@@ -100,7 +100,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResu
         logger.debug(f"Received report for {task.task_uid}: {report}")
         
         # Update status to finished with the report
-        attempt = update_task_status_with_isolation(
+        attempt = await update_task_status_with_isolation(
             task_id=task.task_uid,
             expected_status=TaskStatus.RUNNING,
             status=TaskStatus.FINISHED,
@@ -119,7 +119,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> Optional[CheckingResu
         # Update status to failed with error message
         fail_reason = str(ex) if allow_exceptions else UNEXPECTED_ERROR_MESSAGE
         try:
-            attempt = update_task_status_with_isolation(
+            attempt = await update_task_status_with_isolation(
                 task_id=task.task_uid,
                 expected_status=TaskStatus.RUNNING,
                 status=TaskStatus.FAILED,

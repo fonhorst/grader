@@ -26,16 +26,17 @@ def configure_sqlalchemy_logging():
 # TODO: add cleaning of rabbitmq test-queue
 
 
-@pytest.fixture(scope="function")
-def clean_tasks_table():
+@pytest_asyncio.fixture(scope="function")
+async def clean_tasks_table():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
-    create_tables()
-    delete_all_tasks()
+    await create_tables()
+    await delete_all_tasks()
     # Return the count of tasks after cleaning (should be 0)
-    remaining_tasks = len(list_tasks())
+    tasks = await list_tasks()
+    remaining_tasks = len(tasks)
     yield remaining_tasks
     # Cleanup after test as well
-    delete_all_tasks()
+    await delete_all_tasks()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -102,7 +103,7 @@ async def wait_for_status(
             return None
             
         # Get current status
-        status = service.status(task_id)
+        status = await service.status(task_id)
         current_status = status.status
         logger.debug(f"Obtained status: {current_status}")
         if current_status == expected_status.value:

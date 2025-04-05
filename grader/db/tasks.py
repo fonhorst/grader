@@ -5,10 +5,11 @@ import os
 import uuid
 from typing import Optional, Dict, Union, Any, List, cast, Tuple
 
-from sqlalchemy import create_engine, String, UUID, TIMESTAMP, ForeignKey, inspect
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy import String, UUID, TIMESTAMP, ForeignKey, inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship, joinedload
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, joinedload
 
 from grader.env import ENV_VAR_DB_CONN, ENV_VAR_ECHO_DB_QUERY
 
@@ -16,15 +17,17 @@ logger = logging.getLogger(__name__)
 
 DateTimeType = Optional[Union[str, float, datetime.datetime]]
 
+# Convert connection string to async version
 DB_CONN = os.environ.get(ENV_VAR_DB_CONN, 'postgresql://postgres:postgres@localhost:5432/grader')
+ASYNC_DB_CONN = DB_CONN.replace('postgresql://', 'postgresql+asyncpg://')
 
-logger.warning("DB_CONN %s" % DB_CONN)
+logger.warning("DB_CONN %s" % ASYNC_DB_CONN)
 
-# TODO: move to async version
-engine = create_engine(DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "no") == "yes")
+# Create async engine and session maker
+engine = create_async_engine(ASYNC_DB_CONN, echo=os.environ.get(ENV_VAR_ECHO_DB_QUERY, "no") == "yes")
 # https://docs.sqlalchemy.org/en/20/orm/sessionF_transaction.html#setting-isolation-for-individual-sessions
 isolated_engine = engine.execution_options(isolation_level="REPEATABLE READ")
-SessionBuilder = sessionmaker(engine)
+AsyncSessionBuilder = async_sessionmaker(engine)
 
 class ImpossibleTaskStatusTransition(Exception):
     pass
@@ -102,13 +105,14 @@ class Task(Base):
         return f"Task(id={self.id!r}, user_id={self.user_id!r}, name={self.name!r}, status={self.status!r})"
 
 
-def create_tables() -> bool:
+async def create_tables() -> bool:
     """
     Create the tasks table if it doesn't exist.
     Returns True if the table was created, False if it already existed.
     """
     logger.info("Creating required tables")
-    Base.metadata.create_all(engine, checkfirst=True)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 def _standartize_datetime(dt: DateTimeType) -> datetime.datetime:
@@ -133,7 +137,7 @@ def handle_name_like(filters: list, param: Mapped[str], value: Optional[Union[st
     filters.append(expr)
 
 
-def create_task(
+async def create_task(
     *,
     uid: Optional[uuid.UUID] = None,
     name: str,
@@ -142,7 +146,7 @@ def create_task(
     attachment: Optional[str] = None,
     submit_time: Optional[datetime.datetime] = None
 ) -> Task:
-    with SessionBuilder() as session:
+    async with AsyncSessionBuilder() as session:
         dt = datetime.datetime.now()
         task_id = uid or uuid.uuid4()
         task = Task(
@@ -156,35 +160,38 @@ def create_task(
             submit_time=submit_time or dt
         )
         session.add(task)
-        session.commit()
+        await session.commit()
         
         # Refresh the task in the current session to ensure we have a fully loaded object
-        task = session.get(Task, task_id)
+        task = await session.get(Task, task_id)
         if not task:
             raise ValueError(f"Failed to create task with ID {task_id}")
             
         # Clone task attributes to avoid DetachedInstanceError
-        session.expunge(task)  # Detach from session without cascading to DB
+        await session.expunge(task)  # Detach from session without cascading to DB
         
         return task
 
 
-def get_task(task_id: Union[str, uuid.UUID]) -> Task:
-    with SessionBuilder() as session:
-        task = cast(Task, session.get(Task, task_id))
+async def get_task(task_id: Union[str, uuid.UUID]) -> Task:
+    async with AsyncSessionBuilder() as session:
+        task = await session.get(Task, task_id)
         if not task:
             raise ValueError(f"Task with id {task_id} not found")
         return task
 
 
-def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
-    with SessionBuilder(bind=isolated_engine) as session:
-        with session.begin():
+async def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
+    async with AsyncSessionBuilder(bind=isolated_engine) as session:
+        async with session.begin():
             attempt = 0
             max_retries = 3
             while attempt < max_retries:
                 try:
-                    task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
+                    stmt = await session.execute(
+                        session.query(Task).filter(Task.id == task_id).with_for_update()
+                    )
+                    task = stmt.scalar_one()
                     curr_status = TaskStatus(task.status)
 
                     if not TaskStatus.can_proceed(curr_status, status):
@@ -213,22 +220,22 @@ def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus):
                         raise
 
 
-def delete_task(task_id: Union[str, uuid.UUID]):
-    with SessionBuilder() as session:
-        task = session.get(Task, task_id)
+async def delete_task(task_id: Union[str, uuid.UUID]):
+    async with AsyncSessionBuilder() as session:
+        task = await session.get(Task, task_id)
         if task:
-            session.delete(task)
-            session.commit()
+            await session.delete(task)
+            await session.commit()
 
 
-def list_tasks(
+async def list_tasks(
         uids: Optional[List[str]] = None,
         name: Optional[Union[str, List[str]]] = None,
         user_id: Optional[Union[str, List[str]]] = None,
         tag: Optional[Union[str, List[str]]] = None,
         statuses: Optional[List[str]] = None,
         submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None) -> List[Task]:
-    with SessionBuilder() as session:
+    async with AsyncSessionBuilder() as session:
         query = session.query(Task)
 
         filters = []
@@ -254,14 +261,14 @@ def list_tasks(
         if filters:
             query = query.filter(*filters)
 
-        return cast(List[Task], query.all())
+        result = await session.execute(query)
+        return list(result.scalars().all())
 
 
-def delete_all_tasks():
-    logger.info("Deleting all tasks")
-    with SessionBuilder() as session:
-        session.query(Task).delete()
-        session.commit()
+async def delete_all_tasks():
+    async with AsyncSessionBuilder() as session:
+        await session.execute(session.query(Task).delete())
+        await session.commit()
 
 
 class UpdateStatusAttempt:
@@ -270,7 +277,7 @@ class UpdateStatusAttempt:
         self.current_status = current_status
 
 
-def update_task_status_with_isolation(*,
+async def update_task_status_with_isolation(*,
     task_id: Union[str, uuid.UUID],
     expected_status: Optional[Union[TaskStatus, List[TaskStatus]]] = None,
     status: Optional[TaskStatus] = None,
@@ -279,76 +286,71 @@ def update_task_status_with_isolation(*,
     max_attempts: int = 3
 ) -> UpdateStatusAttempt:
     """
-    Update task status in an isolated transaction.
+    Update task status with isolation level, checking expected status.
     
     Args:
-        task_id: ID of the task to update
-        status: New status to set
-        expected_status: Optional status or list of statuses that the task should be in before update
-        report: Optional report to update
-        is_cancelled: Optional flag to set task as cancelled
-        max_attempts: Maximum number of retry attempts for operational errors
+        task_id: ID of task to update
+        expected_status: Expected current status, can be list of statuses or None to skip check
+        status: New status to set, if None the status will not be changed
+        report: Report to set, if None the report will not be changed
+        is_cancelled: Whether to mark task as cancelled
+        max_attempts: Maximum number of attempts for updating
         
     Returns:
-        UpdateStatusAttempt with success status and current status if failed
+        UpdateStatusAttempt with success flag and current status
     """
     attempt = 0
+    
+    # Convert single status to list
+    if expected_status is not None and not isinstance(expected_status, list):
+        expected_status = [expected_status]
+    
     while attempt < max_attempts:
-        with SessionBuilder(bind=isolated_engine) as session:
-            try:
-                with session.begin():
-                    task = cast(Task, session.query(Task).filter(Task.id == task_id).with_for_update().one())
+        try:
+            async with AsyncSessionBuilder(bind=isolated_engine) as session:
+                async with session.begin():
+                    stmt = await session.execute(
+                        session.query(Task).filter(Task.id == task_id).with_for_update()
+                    )
                     
-                    # Check if task is in any of the expected statuses
-                    if expected_status is not None:
-                        expected_statuses = [expected_status] if isinstance(expected_status, TaskStatus) else expected_status
-                        if task.status not in [status.value for status in expected_statuses]:
-                            return UpdateStatusAttempt(
-                                is_success=False,
-                                current_status=TaskStatus(task.status)
-                            )      
-
-                    if status:
-                        curr_status = TaskStatus(task.status)
+                    task = stmt.scalar_one()
+                    curr_status = TaskStatus(task.status)
+                    
+                    # Check current status
+                    if expected_status is not None and curr_status not in expected_status:
+                        return UpdateStatusAttempt(is_success=False, current_status=curr_status)
+                    
+                    dt = datetime.datetime.now()
+                    
+                    # Update values if provided
+                    if status is not None:
                         if not TaskStatus.can_proceed(curr_status, status):
-                            return UpdateStatusAttempt(
-                                is_success=False,
-                                current_status=curr_status
-                            )
-
-                        dt = datetime.datetime.now()
+                            return UpdateStatusAttempt(is_success=False, current_status=curr_status)
+                        
                         task.status = status.value
                         task.status_updated_at = dt
-
+                        
                         if TaskStatus.is_terminal(status):
                             task.end_time = dt
-
+                    
                     if report is not None:
                         task.report = report
-                    
+                        
                     if is_cancelled is not None:
                         task.is_cancelled = is_cancelled
-
-                    # Store the result before committing
-                    return UpdateStatusAttempt(is_success=True, current_status=TaskStatus(task.status))
                     
-            except OperationalError as e:
-                attempt += 1
-                if attempt >= max_attempts:
-                    logger.warning(f"All {max_attempts} attempts to update task {task_id} failed with operational error: {str(e)}")
-                    break
-                else:
-                    logger.debug(f"Attempt {attempt} of {max_attempts} failed for task {task_id}: {str(e)}")
-                    continue
-            
-    # Try to get current status in a new transaction
-    try:
-        with SessionBuilder() as status_session:
-            task = status_session.query(Task).filter(Task.id == task_id).first()
-            if not task:
-                raise ValueError(f"Task {task_id} not found")
-            return UpdateStatusAttempt(is_success=False, current_status=TaskStatus(task.status))
-    except Exception as status_error:
-        logger.error(f"Failed to get current status for task {task_id} after all attempts failed: {str(status_error)}", exc_info=True)
-        raise  # Re-raise the original error if we can't get the current status
+                    await session.commit()
+                    return UpdateStatusAttempt(is_success=True, current_status=curr_status)
+        
+        except OperationalError:
+            logger.error(
+                "Unsuccessful attempt to update task status "
+                "(task_uid=%s) due to operational exception. "
+                "Retry %s of %s",
+                task_id, attempt + 1, max_attempts,
+                exc_info=True
+            )
+            attempt += 1
+            if attempt >= max_attempts:
+                raise
 

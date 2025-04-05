@@ -46,7 +46,6 @@ class TaskResponse(BaseModel):
         )
 
 
-# TODO: make it fully async
 class CheckerService:
     def __init__(self, broker: Optional[RabbitBroker] = None):
         self.broker = broker or broker
@@ -74,7 +73,7 @@ class CheckerService:
             Created task response
         """
         # Create task in database
-        task = create_task(
+        task = await create_task(
             uid=uuid.uuid4(),
             name=name or f"Check {check_type.value}",
             user_id=user_id,
@@ -92,7 +91,6 @@ class CheckerService:
         
         # Send task to queue
         await self.broker.publish(checking_task, "test-queue")
-        # asyncio.create_task(self.broker.publish(checking_task, "test-queue"))
 
         logger.info(f"Task {task.id} sent to queue")
         
@@ -113,14 +111,14 @@ class CheckerService:
         Returns:
             True if the task was cancelled, False otherwise
         """
-        attempt = update_task_status_with_isolation(
+        attempt = await update_task_status_with_isolation(
                 task_id=task_id,
                 expected_status=TaskStatus.CREATED,
                 status=TaskStatus.CANCELLED
             )
         
         if not attempt.is_success and attempt.current_status == TaskStatus.RUNNING:
-            attempt = update_task_status_with_isolation(
+            attempt = await update_task_status_with_isolation(
                 task_id=task_id,
                 expected_status=TaskStatus.RUNNING,
                 is_cancelled=True
@@ -135,7 +133,7 @@ class CheckerService:
         logger.info(f"Task {task_id} was cancelled")
         return True
 
-    def status(self, task_id: Union[str, uuid.UUID]) -> TaskResponse:
+    async def status(self, task_id: Union[str, uuid.UUID]) -> TaskResponse:
         """
         Get status of a task.
         
@@ -145,10 +143,10 @@ class CheckerService:
         Returns:
             Task response with current status
         """
-        task = get_task(task_id)
+        task = await get_task(task_id)
         return TaskResponse.from_db_task(task)
 
-    def list(
+    async def list(
         self,
         *,
         user_id: Optional[str] = None,
@@ -166,22 +164,22 @@ class CheckerService:
         Returns:
             List of matching task responses
         """
-        tasks = list_tasks(
+        tasks = await list_tasks(
             user_id=user_id,
             tag=tag,
             statuses=[status.value] if status else None
         )
         return [TaskResponse.from_db_task(task) for task in tasks]
 
-    def delete(self, task_id: Union[str, uuid.UUID]) -> None:
+    async def delete(self, task_id: Union[str, uuid.UUID]) -> None:
         """
         Delete a task.
         
         Args:
             task_id: ID of the task to delete
         """
-        delete_task(task_id)
+        await delete_task(task_id)
 
-    def delete_all(self) -> None:
+    async def delete_all(self) -> None:
         """Delete all tasks."""
-        delete_all_tasks()
+        await delete_all_tasks()
