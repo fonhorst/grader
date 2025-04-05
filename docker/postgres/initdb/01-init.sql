@@ -1,5 +1,5 @@
 -- Create the grader database if it doesn't exist
-CREATE DATABASE grader
+CREATE DATABASE IF NOT EXISTS grader
     WITH 
     OWNER = postgres
     ENCODING = 'UTF8'

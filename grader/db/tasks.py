@@ -5,7 +5,7 @@ import os
 import uuid
 from typing import Optional, Dict, Union, Any, List, cast, Tuple
 
-from sqlalchemy import create_engine, String, UUID, TIMESTAMP, ForeignKey
+from sqlalchemy import create_engine, String, UUID, TIMESTAMP, ForeignKey, inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship, joinedload
@@ -101,6 +101,22 @@ class Task(Base):
 
     def __repr__(self) -> str:
         return f"Task(id={self.id!r}, user_id={self.user_id!r}, name={self.name!r}, status={self.status!r})"
+
+
+def create_tasks_table() -> bool:
+    """
+    Create the tasks table if it doesn't exist.
+    Returns True if the table was created, False if it already existed.
+    """
+    logger.info("Checking if tasks table exists")
+    inspector = inspect(engine)
+    if not inspector.has_table("tasks"):
+        logger.info("Creating tasks table")
+        Base.metadata.create_all(engine)
+        return True
+    else:
+        logger.info("Tasks table already exists")
+        return False
 
 
 # TODO: revise the implementation of all functions below this line, refactor the code to synchronize them with the change in the classes above in this file
