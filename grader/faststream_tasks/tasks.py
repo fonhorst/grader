@@ -21,6 +21,9 @@ broker = RabbitBroker(os.environ.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:a
 app = FastStream(broker)
 
 
+UNEXPECTED_ERROR_MESSAGE = "Unexpected error happened during the check. Contact the administrator."
+
+
 async def run_check_with_cancellation(task: CheckingTask) -> CheckerReport:
     """
     Run checking function with cancellation support.
@@ -113,7 +116,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
     except Exception as e:
         logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
         # Update status to failed with error message
-        fail_reason = str(e) if allow_exceptions else "Unexpected error happened during the check. Contact the administrator."
+        fail_reason = str(e) if allow_exceptions else UNEXPECTED_ERROR_MESSAGE
         try:
             attempt = update_task_status_with_isolation(
                 task_id=task.task_uid,

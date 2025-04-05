@@ -6,7 +6,7 @@ from faststream.rabbit import TestRabbitBroker
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
-from grader.faststream_tasks.tasks import broker
+from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker
 from grader.services.checker import CheckerService, TaskResponse
 from tests.conftest import wait_for_status
 import logging
@@ -14,6 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# TODO: remove it later
 @pytest.mark.asyncio
 async def test_empty():
     logger.error("Just an empty test")
@@ -84,7 +85,7 @@ async def test_task_submit_negative(clean_tasks_table, monkeypatch):
     """Test complete task lifecycle with failed execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
-    async with TestRabbitBroker(broker) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(broker=br)
         
         # Test data
@@ -97,12 +98,12 @@ async def test_task_submit_negative(clean_tasks_table, monkeypatch):
         # Mock the checking function to raise an exception after delay
         test_error = ValueError("Test error in checking function")
         
-        async def mock_checking(*args, **kwargs):
-            await asyncio.sleep(0.5)  # Simulate work
+        def mock_checking(*args, **kwargs):
+            sleep(0.5)  # Simulate work
             raise test_error
         
         with monkeypatch.context() as m:
-            m.setattr('grader.checking.checking.run_checking', mock_checking)
+            m.setattr('grader.faststream_tasks.tasks.used_run_checking', mock_checking)
             
             # 1. Submit task
             response = await service.submit(
@@ -130,7 +131,7 @@ async def test_task_submit_negative(clean_tasks_table, monkeypatch):
             # 4. Parse and verify error report content
             report = CheckerReport.model_validate_json(failed_status.report)
             assert len(report.checks) == 0
-            assert report.fail_reason == str(test_error)
+            assert report.fail_reason == str(UNEXPECTED_ERROR_MESSAGE)
 
 
 @pytest.mark.asyncio
