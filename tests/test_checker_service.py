@@ -321,7 +321,6 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatc
                 pass  # Expected error when task doesn't exist
 
             await check.wait_call(timeout=5)
-            await asyncio.sleep(2)
 
 
 @pytest.mark.asyncio

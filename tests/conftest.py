@@ -5,6 +5,8 @@ from typing import Optional, List, Union
 import pytest
 import logging
 
+import pytest_asyncio
+
 from grader.faststream_tasks.tasks import broker_url, broker_queue_name
 from grader.db.tasks import TaskStatus, create_tables, delete_all_tasks, list_tasks
 from grader.services.checker import CheckerService, TaskResponse
@@ -36,14 +38,16 @@ def clean_tasks_table():
     delete_all_tasks()
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def clean_rabbitmq_queue():
     """
-    Clean all messages from a specified RabbitMQ queue before and after a test function.
+    Clean RabbitMQ queue by deleting and recreating it before and after a test function.
     
     This fixture ensures that each test starts with an empty queue and also cleans up
     after itself to prevent any messages from affecting subsequent tests.
     """
+
+    logger.info(f"Cleaning RabbitMQ queue '{broker_queue_name}' before test")
     
     # Connect to RabbitMQ
     connection = await aio_pika.connect_robust(broker_url)
@@ -52,24 +56,16 @@ async def clean_rabbitmq_queue():
         # Create channel
         channel = await connection.channel()
         
-        # Declare the queue (if it doesn't exist)
-        queue = await channel.declare_queue(
-            broker_queue_name,
-            durable=True,
-            auto_delete=False
-        )
-        
-        # Purge the queue before the test
-        await queue.purge()
-        logger.info(f"Cleaned RabbitMQ queue '{broker_queue_name}' before test")
+        # Delete the queue if it exists
+        await channel.queue_delete(broker_queue_name, timeout=2)
+        logger.info(f"Deleted RabbitMQ queue '{broker_queue_name}' before test")      
         
         # Run the test
         yield broker_queue_name
         
-        # Purge the queue after the test
-        await queue.purge()
-        
-        logger.info(f"Cleaned RabbitMQ queue '{broker_queue_name}' after test")
+        # Delete the queue after the test
+        await channel.queue_delete(broker_queue_name, timeout=2)
+        logger.info(f"Deleted RabbitMQ queue '{broker_queue_name}' after test")
         
     finally:
         # Close the connection
