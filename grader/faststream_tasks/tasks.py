@@ -10,7 +10,7 @@ from faststream.rabbit.annotations import RabbitMessage
 from grader.checking.base import CheckerReport
 from grader.checking.checking import run_checking
 from grader.db.tasks import TaskStatus, get_task, update_task_status_with_isolation
-from grader.faststream_tasks.schemes import CheckingResult, CheckingTask
+from grader.faststream_tasks.schemes import CheckingResult, CheckingTask, FastStreamCheckTaskException
 
 used_run_checking = run_checking
 
@@ -113,10 +113,10 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         logger.info(f"Successfully finished checking {task.task_uid}")
         return CheckingResult(task_uid=task.task_uid, report=report)
         
-    except Exception as e:
-        logger.error(f"Error checking {task.task_uid}: {str(e)}", exc_info=True)
+    except Exception as ex:
+        logger.error(f"Error checking {task.task_uid}: {str(ex)}", exc_info=True)
         # Update status to failed with error message
-        fail_reason = str(e) if allow_exceptions else UNEXPECTED_ERROR_MESSAGE
+        fail_reason = str(ex) if allow_exceptions else UNEXPECTED_ERROR_MESSAGE
         try:
             attempt = update_task_status_with_isolation(
                 task_id=task.task_uid,
@@ -133,7 +133,7 @@ async def check(task: CheckingTask, msg: RabbitMessage) -> CheckingResult:
         except Exception as e:
             logger.error(f"Error updating task status for {task.task_uid} to FAILED: {str(e)}", exc_info=True)
         
-        raise
+        # raise FastStreamCheckTaskException("FastStream 'check' handler failed") from ex
     finally:
         # Acknowledge the message only after all operations are complete
         logger.info(f"Acknowledging message for {task.task_uid}")

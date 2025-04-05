@@ -5,6 +5,10 @@ from grader.checking.base import CheckerReport
 from grader.checking.checking import CheckType
 
 
+class FastStreamCheckTaskException(Exception):
+    pass
+
+
 class CheckingTask(BaseModel):
     task_uid: str
     user_id: str

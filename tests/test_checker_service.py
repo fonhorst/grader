@@ -6,6 +6,7 @@ from faststream.rabbit import TestRabbitBroker
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
+from grader.faststream_tasks.schemes import FastStreamCheckTaskException
 from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker, check
 from grader.services.checker import CheckerService, TaskResponse
 from tests.conftest import wait_for_status
@@ -355,4 +356,24 @@ async def test_delete_all_tasks(clean_tasks_table, monkeypatch):
             # Verify all tasks are deleted
             remaining_tasks = service.list()
             assert len(remaining_tasks) == 0 
+
+            # Wait for all mock calls to complete (expecting 3 calls, one for each task)
+            start_time = asyncio.get_event_loop().time()
+            timeout = 5.0
+            
+            while True:
+                # Check if we've reached the desired call count
+                if check.mock.call_count >= 3:
+                    logger.info(f"Reached expected call count: {check.mock.call_count}")
+                    break
+                
+                # Check if we've exceeded the timeout
+                if asyncio.get_event_loop().time() - start_time > timeout:
+                    logger.warning(f"Timeout reached waiting for mock calls. Current call count: {check.mock.call_count}")
+                    break
+                
+                # Short delay to avoid tight loop
+                await asyncio.sleep(0.1)
+
+        assert check.mock.call_count == 3
 
