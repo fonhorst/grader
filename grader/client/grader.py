@@ -72,7 +72,7 @@ class GraderAPIClient:
                 detail=detail
             )
 
-    async def submit_task(self, request: TaskSubmitRequest, wait_timeout: Optional[int] = None) -> TaskResponse:
+    async def submit_task(self, request: TaskSubmitRequest, wait_timeout: Optional[float] = None, poll_interval: float = 1.0) -> TaskResponse:
         """Submit a new task and optionally wait for completion.
         
         Args:
@@ -80,6 +80,7 @@ class GraderAPIClient:
             wait_timeout: If not None, wait for task completion for this many seconds.
                         If 0, wait indefinitely. If task doesn't complete within timeout,
                         raises GraderApiTimeoutException.
+            poll_interval: The interval to poll for task completion in seconds.It has no effect if wait_timeout is None.
         """
         data = await self._make_request('POST', '/tasks/', json=request.model_dump())
         response = TaskResponse(**data)
@@ -97,7 +98,7 @@ class GraderAPIClient:
                         detail=f"Current status: {task.status}"
                     )
                 
-                await asyncio.sleep(1)  # Poll every second
+                await asyncio.sleep(poll_interval)  # Poll every second
         
         return response
 

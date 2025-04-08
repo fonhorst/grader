@@ -103,7 +103,8 @@ def k8s():
 @click.option('--args', type=str, help='JSON string with arguments for the checker. Mutually exclusive with --args-file')
 @click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
 @click.option('--wait', '-w', type=int, help='Wait for task completion (timeout in seconds, 0 for indefinite wait)')
-def run(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int]):
+@click.option('--poll-interval', '-p', type=float, help='Poll interval for task completion in seconds. Default is 1.0 second.', default=1.0)
+def run(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float):
     """Submit a new checking task and optionally wait for completion."""
     logger.info(f"Running task for user {user_id} with check type {check_type}")
     
@@ -133,7 +134,7 @@ def run(check_type: str, user_id: str, name: str, tag: str, args: str, args_file
             )
             
             async with GraderAPIClient(base_url=get_api_url()) as client:
-                response = await client.submit_task(request, wait_timeout=wait)
+                response = await client.submit_task(request, wait_timeout=wait, poll_interval=poll_interval)
                 logger.info(f"Task {'completed' if wait else 'submitted'} with ID: {response.id}")
                 click.echo(format_task_info(response.model_dump()))
                 
