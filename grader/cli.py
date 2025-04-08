@@ -392,8 +392,13 @@ def run(checker: str, arguments: str, output: str):
 def start(host: str, port: int, reload: bool):
     """Start the REST API server."""
     logger.info(f"Starting API server on {host}:{port}")
+    
     import uvicorn
-    from grader.app import app
+    from fastapi import FastAPI
+    from grader.api.tasks_api import router as tasks_router
+    
+    app = FastAPI()
+    app.include_router(tasks_router)
     
     logger.info("API server configured with Swagger UI at /docs")
     try:
