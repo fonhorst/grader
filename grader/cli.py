@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 
 from grader.client.grader import GraderAPIClient, GraderApiException
+from grader.schemes import TaskSubmitRequest
 
 logger = logging.getLogger(__name__)
 
