@@ -18,7 +18,7 @@ from grader.faststream_tasks.tasks import broker
 logger = logging.getLogger(__name__)
 
 
-class TaskResponse(BaseModel):
+class TaskInfo(BaseModel):
     id: uuid.UUID
     user_id: str
     name: str
@@ -31,7 +31,7 @@ class TaskResponse(BaseModel):
     report: Optional[str] = None
 
     @classmethod
-    def from_db_task(cls, task: Task) -> 'TaskResponse':
+    def from_db_task(cls, task: Task) -> 'TaskInfo':
         return cls(
             id=task.id,
             user_id=task.user_id,
@@ -58,7 +58,7 @@ class CheckerService:
         args: Dict[str, Any],
         name: Optional[str] = None,
         tag: Optional[str] = None
-    ) -> TaskResponse:
+    ) -> TaskInfo:
         """
         Submit a new checking task.
         
@@ -95,7 +95,7 @@ class CheckerService:
         logger.info(f"Task {task.id} sent to queue")
         
         # Get task and convert to response
-        return TaskResponse.from_db_task(task)
+        return TaskInfo.from_db_task(task)
 
     async def cancel(self, task_id: Union[str, uuid.UUID]) -> bool:
         """
@@ -133,7 +133,7 @@ class CheckerService:
         logger.info(f"Task {task_id} was cancelled")
         return True
 
-    async def status(self, task_id: Union[str, uuid.UUID]) -> TaskResponse:
+    async def status(self, task_id: Union[str, uuid.UUID]) -> TaskInfo:
         """
         Get status of a task.
         
@@ -144,7 +144,7 @@ class CheckerService:
             Task response with current status
         """
         task = await get_task(task_id)
-        return TaskResponse.from_db_task(task)
+        return TaskInfo.from_db_task(task)
 
     async def list(
         self,
@@ -152,7 +152,7 @@ class CheckerService:
         user_id: Optional[str] = None,
         tag: Optional[str] = None,
         status: Optional[TaskStatus] = None
-    ) -> List[TaskResponse]:
+    ) -> List[TaskInfo]:
         """
         List tasks with optional filters.
         
@@ -169,7 +169,7 @@ class CheckerService:
             tag=tag,
             statuses=[status.value] if status else None
         )
-        return [TaskResponse.from_db_task(task) for task in tasks]
+        return [TaskInfo.from_db_task(task) for task in tasks]
 
     async def delete(self, task_id: Union[str, uuid.UUID]) -> None:
         """

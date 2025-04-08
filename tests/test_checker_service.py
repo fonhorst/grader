@@ -8,7 +8,7 @@ from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
 from grader.faststream_tasks.schemes import FastStreamCheckTaskException
 from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker, check
-from grader.services.checker import CheckerService, TaskResponse
+from grader.services.checker import CheckerService, TaskInfo
 from tests.conftest import wait_for_status
 import logging
 
@@ -54,7 +54,7 @@ async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, mon
             )
             
             # Verify initial state
-            assert isinstance(response, TaskResponse)
+            assert isinstance(response, TaskInfo)
             assert response.status == TaskStatus.CREATED.value
             
             # 2. Wait for task to start running
@@ -111,7 +111,7 @@ async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, mon
             )
             
             # Verify initial state
-            assert isinstance(response, TaskResponse)
+            assert isinstance(response, TaskInfo)
             assert response.status == TaskStatus.CREATED.value
             
             # 2. Wait for task to start running
@@ -165,7 +165,7 @@ async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, monkey
             )
             
             # Verify initial state
-            assert isinstance(response, TaskResponse)
+            assert isinstance(response, TaskInfo)
             assert response.status == TaskStatus.CREATED.value
             
             # 2. Wait for task to start running

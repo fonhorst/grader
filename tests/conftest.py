@@ -9,7 +9,7 @@ import pytest_asyncio
 
 from grader.faststream_tasks.tasks import broker_url, broker_queue_name
 from grader.db.tasks import TaskStatus, create_tables, delete_all_tasks, list_tasks
-from grader.services.checker import CheckerService, TaskResponse
+from grader.services.checker import CheckerService, TaskInfo
 
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ async def wait_for_status(
     expected_status: TaskStatus,
     timeout: float = 5.0,
     check_interval: float = 0.1
-) -> Optional[TaskResponse]:
+) -> Optional[TaskInfo]:
     """
     Wait for a task to reach a specific status.
     
