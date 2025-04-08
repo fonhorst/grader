@@ -54,6 +54,9 @@ def task():
 def checker():
     pass
 
+@cli.group()
+def api():
+    pass
 
 @cli.group()
 def k8s():
@@ -73,6 +76,10 @@ def k8s():
 # This group should be used to check the lab without a service and a queue, by direct running of the checker instead
 # implemnt for the available checkers in grader/checking
 
+# TODO: implement commands for api group:
+# this group should be used to spawn the REST API server and contain commands for:
+# - start
+# This command is synchronous and should start Uvicorn server for the REST API
 
 # TODO: implement commands for k8s group:
 # - info
