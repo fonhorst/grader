@@ -1,0 +1,31 @@
+replicaCount: 1
+
+image:
+  repository: node2.bdcl:5000/grader-app
+  tag: latest
+
+service:
+  type: NodePort
+  port: 8080
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+config:
+  graderVersion: "0.1.2"
+  rabbitmq:
+    host: rabbitmq-service
+    port: 5672
+    user: admin
+    password: admin
+  postgres:
+    host: postgres-service
+    port: 5432
+    user: postgres
+    password: postgres
+    database: grader 
