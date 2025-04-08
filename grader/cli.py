@@ -10,6 +10,7 @@ import json
 import uuid
 from datetime import datetime
 
+from grader.client.grader import GraderAPIClient, GraderApiException
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,11 @@ def get_api_url() -> str:
     api_url = os.getenv('GRADER_API_URL', 'http://localhost:8080')
     logger.info(f"Using API URL: {api_url}")
     return api_url
+
+
+def get_client() -> GraderAPIClient:
+    """Get an instance of the GraderAPIClient."""
+    return GraderAPIClient(base_url=get_api_url())
 
 
 def format_task_info(task_data: dict) -> str:
@@ -100,14 +106,7 @@ def k8s():
 @click.option('--args', type=str, help='JSON string with arguments for the checker. Mutually exclusive with --args-file')
 @click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
 def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str):
-    """Submit a new checking task.
-    
-    The checker arguments can be provided either:
-    - directly via --args as a JSON string
-    - through a JSON file specified with --args-file
-    
-    These options are mutually exclusive - you must use one or the other, not both.
-    """
+    """Submit a new checking task."""
     logger.info(f"Submitting new task for user {user_id} with check type {check_type}")
     
     # Check mutual exclusivity of args and args_file
@@ -126,25 +125,27 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
             with open(args_file) as f:
                 checker_args = json.load(f)
         
-        data = {
-            "check_type": check_type,
-            "user_id": user_id,
-            "name": name,
-            "tag": tag,
-            "args": checker_args
-        }
-        logger.info(f"Submitting task with data: {data}")
+        request = TaskSubmitRequest(
+            check_type=check_type,
+            user_id=user_id,
+            name=name,
+            tag=tag,
+            args=checker_args
+        )
         
-        api_url = get_api_url()
-        response = requests.post(f"{api_url}/tasks/", json=data)
-        response.raise_for_status()
-        result = response.json()
-        logger.info(f"Task submitted successfully with ID: {result.get('id')}")
-        click.echo(json.dumps(result, indent=2))
+        client = get_client()
+        response = client.submit_task(request)
+        logger.info(f"Task submitted successfully with ID: {response.id}")
+        click.echo(format_task_info(response.model_dump()))
+        
     except json.JSONDecodeError as e:
         error_msg = f"Error: Invalid JSON format - {str(e)}"
         logger.error(error_msg)
         click.echo(error_msg, err=True)
+        sys.exit(1)
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to submit task: {e.detail or e.message}", err=True)
         sys.exit(1)
     except Exception as e:
         logger.error(f"Error submitting task: {str(e)}", exc_info=True)
@@ -160,21 +161,16 @@ def list(user_id: str, tag: str, status: str):
     """List tasks with optional filtering."""
     logger.info("Listing tasks with filters")
     try:
-        params = {}
-        if user_id is not None:
-            params['user_id'] = user_id
-        if tag is not None:
-            params['tag'] = tag
-        if status is not None:
-            params['status'] = status
-        
-        logger.info(f"Using filter params: {params}")
-        api_url = get_api_url()
-        response = requests.get(f"{api_url}/tasks/", params=params)
-        response.raise_for_status()
-        result = response.json()
-        logger.info(f"Found {len(result.get('tasks', []))} tasks")
-        click.echo(json.dumps(result, indent=2))
+        client = get_client()
+        response = client.list_tasks(user_id=user_id, tag=tag, status=status)
+        logger.info(f"Found {len(response.tasks)} tasks")
+        for task in response.tasks:
+            click.echo(format_task_info(task.model_dump()))
+            click.echo("---")
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to list tasks: {e.detail or e.message}", err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error listing tasks: {str(e)}", exc_info=True)
         click.echo(f"Failed to list tasks: {str(e)}", err=True)
@@ -189,32 +185,32 @@ def get(task_id: str, json_file: str, report_file: str):
     """Get information about a specific task."""
     logger.info(f"Getting task info for ID: {task_id}")
     try:
-        api_url = get_api_url()
-        response = requests.get(f"{api_url}/tasks/{task_id}")
-        response.raise_for_status()
-        task_data = response.json()
+        client = get_client()
+        task_data = client.get_task(uuid.UUID(task_id))
         
         logger.debug(f"Retrieved task data: {task_data}")
-        
-        # Print formatted task info
-        click.echo(format_task_info(task_data))
+        click.echo(format_task_info(task_data.model_dump()))
         
         # Save JSON if requested
         if json_file:
             logger.debug(f"Saving task info to JSON file: {json_file}")
             with open(json_file, 'w') as f:
-                json.dump(task_data, f, indent=2)
+                json.dump(task_data.model_dump(), f, indent=2)
             click.echo(f"\nTask info saved to {json_file}")
         
         # Save report if requested and available
-        if report_file and task_data.get('report'):
+        if report_file and task_data.report:
             logger.debug(f"Saving report to file: {report_file}")
             with open(report_file, 'w') as f:
-                f.write(task_data['report'])
+                f.write(task_data.report)
             click.echo(f"Report saved to {report_file}")
         elif report_file:
             click.echo("\nNo report available for this task", err=True)
             
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to get task: {e.detail or e.message}", err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error getting task: {str(e)}", exc_info=True)
         click.echo(f"Failed to get task: {str(e)}", err=True)
@@ -228,23 +224,23 @@ def cancel(task_id: str, json_file: str):
     """Cancel a running task."""
     logger.info(f"Canceling task with ID: {task_id}")
     try:
-        api_url = get_api_url()
-        response = requests.post(f"{api_url}/tasks/{task_id}/cancel")
-        response.raise_for_status()
-        task_data = response.json()
+        client = get_client()
+        task_data = client.cancel_task(uuid.UUID(task_id))
         
         logger.debug(f"Task cancel response: {task_data}")
-        
-        # Print formatted task info
-        click.echo(format_task_info(task_data))
+        click.echo(format_task_info(task_data.model_dump()))
         
         # Save JSON if requested
         if json_file:
             logger.debug(f"Saving response to JSON file: {json_file}")
             with open(json_file, 'w') as f:
-                json.dump(task_data, f, indent=2)
+                json.dump(task_data.model_dump(), f, indent=2)
             click.echo(f"\nResponse saved to {json_file}")
             
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to cancel task: {e.detail or e.message}", err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error canceling task: {str(e)}", exc_info=True)
         click.echo(f"Failed to cancel the task: {str(e)}", err=True)
@@ -258,23 +254,14 @@ def delete(task_id: str, json_file: str):
     """Delete a task."""
     logger.info(f"Deleting task with ID: {task_id}")
     try:
-        api_url = get_api_url()
-        response = requests.delete(f"{api_url}/tasks/{task_id}")
-        response.raise_for_status()
-        task_data = response.json()
-        
-        logger.debug(f"Task deletion response: {task_data}")
-        
-        # Print formatted task info
-        click.echo(format_task_info(task_data))
-        
-        # Save JSON if requested
-        if json_file:
-            logger.debug(f"Saving response to JSON file: {json_file}")
-            with open(json_file, 'w') as f:
-                json.dump(task_data, f, indent=2)
-            click.echo(f"\nResponse saved to {json_file}")
+        client = get_client()
+        client.delete_task(uuid.UUID(task_id))
+        click.echo("Task deleted successfully")
             
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to delete task: {e.detail or e.message}", err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error deleting task: {str(e)}", exc_info=True)
         click.echo(f"Failed to delete the task: {str(e)}", err=True)
@@ -288,30 +275,23 @@ def report(task_id: str, output_file: str):
     """Get the report from a finished task."""
     logger.info(f"Getting report for task ID: {task_id}")
     try:
-        api_url = get_api_url()
+        client = get_client()
+        report_data = client.get_task_report(uuid.UUID(task_id))
         
-        # First get task info to check status
-        task_response = requests.get(f"{api_url}/tasks/{task_id}")
-        task_response.raise_for_status()
-        task_data = task_response.json()
-        logger.debug(f"Retrieved task data: {task_data}")
-        
-        # Get report
-        report_response = requests.get(f"{api_url}/tasks/{task_id}/report")
-        report_response.raise_for_status()
-        report_data = report_response.json()
-        
-        if not report_data.get('report'):
-            click.echo(format_task_info(task_data))
+        if not report_data.report:
             click.echo("\nNo report available for this task", err=True)
             return
         
         # Save report in markdown format
         logger.debug(f"Saving report to file: {output_file}")
         with open(output_file, 'w') as f:
-            f.write(report_data['report'])
+            f.write(report_data.report)
         click.echo(f"Report saved to {output_file}")
         
+    except GraderApiException as e:
+        logger.error(f"API Error: {e.message}", exc_info=True)
+        click.echo(f"Failed to get report: {e.detail or e.message}", err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error getting report: {str(e)}", exc_info=True)
         click.echo(f"Failed to get the report: {str(e)}", err=True)

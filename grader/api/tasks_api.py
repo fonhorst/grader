@@ -4,7 +4,7 @@ import uuid
 import logging
 
 from grader.services.checker import CheckerService, TaskInfo
-from grader.api.schemes import (
+from grader.schemes import (
     MessageResponse,
     TaskReportResponse,
     TaskSubmitRequest,
