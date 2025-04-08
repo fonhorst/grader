@@ -141,52 +141,120 @@ def list(user_id: str, tag: str, status: str):
     All filter parameters are optional. If none are provided, all tasks will be listed.
     """
     try:
-        # TODO: DO NOT use locals() here, build a proper params dict instead with explicit keys
-        params = {k: v for k, v in locals().items() if v is not None}
+        params = {}
+        if user_id is not None:
+            params['user_id'] = user_id
+        if tag is not None:
+            params['tag'] = tag
+        if status is not None:
+            params['status'] = status
+            
         response = requests.get("http://localhost:8000/tasks/", params=params)
         response.raise_for_status()
         click.echo(json.dumps(response.json(), indent=2))
     except Exception as e:
         click.echo(f"Error listing tasks: {str(e)}", err=True)
 
-# TODO: format beautifully in a human-readable format the info about the task and print it on screen 
-# (use different colors to highlight the most important fields like id, status, name. BAD statuses should be RED)
-# TODO: add an option to save the info to a json file, but make printing the default behavior
-# TODO: add an option to save report to a markdown file if it is available. DO NOT print report on the screen in any sutuations.
+def format_task_info(task_data: dict) -> str:
+    """Format task information in a human-readable way with colors."""
+    status = task_data.get('status', 'UNKNOWN')
+    status_color = {
+        'PENDING': 'yellow',
+        'RUNNING': 'blue',
+        'COMPLETED': 'green',
+        'FAILED': 'red',
+        'CANCELLED': 'red',
+        'ERROR': 'red'
+    }.get(status, 'white')
+
+    formatted = [
+        click.style(f"Task ID: {task_data.get('id')}", bold=True),
+        click.style(f"Status: {status}", fg=status_color, bold=True),
+        f"Name: {task_data.get('name', 'N/A')}",
+        f"User ID: {task_data.get('user_id', 'N/A')}",
+        f"Tag: {task_data.get('tag', 'N/A')}",
+        f"Submit Time: {task_data.get('submit_time', 'N/A')}",
+        f"End Time: {task_data.get('end_time', 'N/A')}"
+    ]
+    
+    return "\n".join(formatted)
+
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to retrieve')
-def get(task_id: str):
-    """Get information about a specific task."""
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save task info to this JSON file')
+@click.option('--report-file', type=click.Path(dir_okay=False), help='Save task report to this Markdown file if available')
+def get(task_id: str, json_file: str, report_file: str):
+    """Get information about a specific task.
+    
+    Displays task information in a human-readable format with color highlighting.
+    Optionally saves the raw data to a JSON file and/or the report to a Markdown file.
+    """
     try:
         response = requests.get(f"http://localhost:8000/tasks/{task_id}")
         response.raise_for_status()
-        click.echo(json.dumps(response.json(), indent=2))
+        task_data = response.json()
+        
+        # Print formatted task info
+        click.echo(format_task_info(task_data))
+        
+        # Save JSON if requested
+        if json_file:
+            with open(json_file, 'w') as f:
+                json.dump(task_data, f, indent=2)
+            click.echo(f"\nTask info saved to {json_file}")
+        
+        # Save report if requested and available
+        if report_file and task_data.get('report'):
+            with open(report_file, 'w') as f:
+                f.write(task_data['report'])
+            click.echo(f"Report saved to {report_file}")
+        elif report_file:
+            click.echo("\nNo report available for this task", err=True)
+            
     except Exception as e:
         click.echo(f"Error getting task: {str(e)}", err=True)
 
-
-# TODO:work with the status the same way as described in the TODO for the get command
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to cancel')
-def cancel(task_id: str):
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
+def cancel(task_id: str, json_file: str):
     """Cancel a running task."""
     try:
         response = requests.post(f"http://localhost:8000/tasks/{task_id}/cancel")
         response.raise_for_status()
-        click.echo(json.dumps(response.json(), indent=2))
+        task_data = response.json()
+        
+        # Print formatted task info
+        click.echo(format_task_info(task_data))
+        
+        # Save JSON if requested
+        if json_file:
+            with open(json_file, 'w') as f:
+                json.dump(task_data, f, indent=2)
+            click.echo(f"\nResponse saved to {json_file}")
+            
     except Exception as e:
         click.echo(f"Error canceling task: {str(e)}", err=True)
 
-
-# TODO:work with the status the same way as described in the TODO for the get command
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to delete')
-def delete(task_id: str):
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
+def delete(task_id: str, json_file: str):
     """Delete a task."""
     try:
         response = requests.delete(f"http://localhost:8000/tasks/{task_id}")
         response.raise_for_status()
-        click.echo(json.dumps(response.json(), indent=2))
+        task_data = response.json()
+        
+        # Print formatted task info
+        click.echo(format_task_info(task_data))
+        
+        # Save JSON if requested
+        if json_file:
+            with open(json_file, 'w') as f:
+                json.dump(task_data, f, indent=2)
+            click.echo(f"\nResponse saved to {json_file}")
+            
     except Exception as e:
         click.echo(f"Error deleting task: {str(e)}", err=True)
 
@@ -195,24 +263,34 @@ def delete(task_id: str):
 # TODO: if report is not available, print an error message and specify the task status
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to get report for')
-@click.option('--output-file', '-o', type=click.Path(dir_okay=False), help='Save report to this file (JSON format)')
+@click.option('--output-file', '-o', type=click.Path(dir_okay=False), required=True, help='Save report to this file (Markdown format)')
 def report(task_id: str, output_file: str):
     """Get the report from a finished task.
     
-    If --output-file is specified, saves the report to the file in JSON format.
-    Otherwise, prints the report to stdout.
+    Saves the report to the specified file in Markdown format.
+    If the report is not available, displays the task status and an error message.
     """
     try:
-        response = requests.get(f"http://localhost:8000/tasks/{task_id}/report")
-        response.raise_for_status()
-        report_data = response.json()
+        # First get task info to check status
+        task_response = requests.get(f"http://localhost:8000/tasks/{task_id}")
+        task_response.raise_for_status()
+        task_data = task_response.json()
         
-        if output_file:
-            with open(output_file, 'w') as f:
-                json.dump(report_data, f, indent=2)
-            click.echo(f"Report saved to {output_file}")
-        else:
-            click.echo(json.dumps(report_data, indent=2))
+        # Get report
+        report_response = requests.get(f"http://localhost:8000/tasks/{task_id}/report")
+        report_response.raise_for_status()
+        report_data = report_response.json()
+        
+        if not report_data.get('report'):
+            click.echo(format_task_info(task_data))
+            click.echo("\nNo report available for this task", err=True)
+            return
+        
+        # Save report in markdown format
+        with open(output_file, 'w') as f:
+            f.write(report_data['report'])
+        click.echo(f"Report saved to {output_file}")
+        
     except Exception as e:
         click.echo(f"Error getting report: {str(e)}", err=True)
 
@@ -222,14 +300,14 @@ def report(task_id: str, output_file: str):
 # grader checker run --checker=<fully qualified name of the checker class> --arguments=<path to a json file with checker arguments> --output="Output path for the report in .md format"
 
 # TODO: remove --output-json and --output-markdown options from the command. Add --output option instead. We only allow Markdown output for now.
+@checker.command()
 @click.option('--host', '-h', default="localhost", show_default=True, help='ClickHouse host address')
 @click.option('--user', '-u', default="admin", show_default=True, help='Admin username')
 @click.option('--student', '-s', required=True, help='Student username to check')
 @click.option('--cluster-name', '-c', default="main_cluster", show_default=True, help='ClickHouse cluster name')
-@click.option('--output-json', '-j', default="checker_report.json", show_default=True, help='Path to save the JSON report')
-@click.option('--output-markdown', '-m', default="checker_report.md", show_default=True, help='Path to save the Markdown report')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
 @click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
-def clickhouse(host: str, user: str, student: str, cluster_name: str, output_json: str, output_markdown: str, log_file: str):
+def clickhouse(host: str, user: str, student: str, cluster_name: str, output: str, log_file: str):
     """Run ClickHouse checker directly.
     
     This command runs the ClickHouse checker without using the task queue service.
@@ -251,16 +329,51 @@ def clickhouse(host: str, user: str, student: str, cluster_name: str, output_jso
             cluster_name=cluster_name
         )
         
-        # Save report as JSON
-        with open(output_json, 'w') as f:
-            f.write(report.json(indent=2))
-        click.echo(f"Saved JSON report to {output_json}")
+        # Save report as Markdown
+        markdown_report = report.to_markdown()
+        with open(output, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {output}")
+        
+        if not report.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        exit(1)
+
+@checker.command()
+@click.option('--checker', required=True, type=str, help='Fully qualified name of the checker class (e.g. grader.checking.ch_checker.ClickHouseChecker)')
+@click.option('--arguments', required=True, type=click.Path(exists=True, dir_okay=False), help='Path to JSON file with checker arguments')
+@click.option('--output', required=True, type=click.Path(dir_okay=False), help='Output path for the report in Markdown format')
+def run(checker: str, arguments: str, output: str):
+    """Run an arbitrary checker directly.
+    
+    This command allows running any checker by specifying its fully qualified class name
+    and providing arguments through a JSON file.
+    """
+    try:
+        # Import the checker class dynamically
+        module_path, class_name = checker.rsplit('.', 1)
+        import importlib
+        module = importlib.import_module(module_path)
+        checker_class = getattr(module, class_name)
+        
+        # Load arguments
+        with open(arguments) as f:
+            checker_args = json.load(f)
+        
+        # Initialize and run checker
+        checker_instance = checker_class(**checker_args)
+        report = checker_instance.run_checks()
         
         # Save report as Markdown
         markdown_report = report.to_markdown()
-        with open(output_markdown, 'w') as f:
+        with open(output, 'w') as f:
             f.write(markdown_report)
-        click.echo(f"Saved Markdown report to {output_markdown}")
+        click.echo(f"Report saved to {output}")
         
         if not report.has_success():
             click.echo("Checking failed!", err=True)
@@ -350,6 +463,97 @@ Notes:
 - For troubleshooting: kubectl describe pod <pod-name>
 """
     click.echo(instructions)
+
+@k8s.command()
+@click.option('--output', '-o', type=click.Path(dir_okay=False), required=True, help='Path to save the installation script')
+def install_script(output: str):
+    """Generate a bash script for installing all components on Kubernetes."""
+    script_content = """#!/bin/bash
+set -e
+
+echo "Starting Grader components installation..."
+
+# Function to check if a command exists
+check_command() {
+    if ! command -v $1 &> /dev/null; then
+        echo "Error: $1 is required but not installed."
+        exit 1
+    fi
+}
+
+# Check prerequisites
+echo "Checking prerequisites..."
+check_command kubectl
+check_command helm
+
+# Check if we can connect to the cluster
+kubectl cluster-info || {
+    echo "Error: Cannot connect to Kubernetes cluster"
+    exit 1
+}
+
+# Check if storage class exists
+kubectl get storageclass ess-dn2 || {
+    echo "Error: Storage class 'ess-dn2' not found"
+    exit 1
+}
+
+# Function to wait for pods to be ready
+wait_for_pods() {
+    namespace=$1
+    echo "Waiting for pods in namespace $namespace to be ready..."
+    kubectl wait --for=condition=ready pod --all -n $namespace --timeout=300s
+}
+
+# Create namespace if it doesn't exist
+kubectl create namespace grader 2>/dev/null || true
+
+echo "Installing HDFS..."
+cd k8s
+helm install hdfs ./hdfs-chart -f hdfs-values.yaml -n grader || {
+    echo "Error installing HDFS chart"
+    exit 1
+}
+
+echo "Installing ClickHouse..."
+helm install clickhouse ./ch-chart -f ch-values.yaml -n grader || {
+    echo "Error installing ClickHouse chart"
+    exit 1
+}
+
+echo "Installing Workspace..."
+helm install workspace ./Workspace -n grader || {
+    echo "Error installing Workspace chart"
+    exit 1
+}
+
+echo "Waiting for all pods to be ready..."
+wait_for_pods grader
+
+echo "Installation complete! Checking component status..."
+kubectl get pods -n grader
+kubectl get pvc -n grader
+kubectl get svc -n grader
+
+echo "
+Installation successful! Here are some useful commands:
+
+Check pod status:    kubectl get pods -n grader
+Check services:      kubectl get svc -n grader
+Check PVCs:          kubectl get pvc -n grader
+View pod logs:       kubectl logs -n grader <pod-name>
+Pod details:         kubectl describe pod -n grader <pod-name>
+"
+"""
+    
+    try:
+        with open(output, 'w') as f:
+            f.write(script_content)
+        os.chmod(output, 0o755)  # Make the script executable
+        click.echo(f"Installation script saved to {output}")
+        click.echo("You can now run the script to install all components.")
+    except Exception as e:
+        click.echo(f"Error creating installation script: {str(e)}", err=True)
 
 if __name__ == "__main__":
     cli()
