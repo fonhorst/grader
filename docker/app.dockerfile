@@ -1,4 +1,20 @@
-FROM python:3.12-bookworm
+FROM python:3.12-bookworm as builder
+
+RUN pip install poetry
+
+WORKDIR /build
+
+# Copy only the files needed for building
+COPY pyproject.toml poetry.lock ./
+COPY grader ./grader
+
+# Build wheel
+RUN poetry build
+
+# Export requirements
+RUN poetry export -f requirements.txt --output requirements.txt --without-hashes
+
+FROM python:3.12-bookworm as final
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -9,19 +25,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install poetry
+WORKDIR /app
 
-RUN mkdir -p /app
+# Copy artifacts from builder
+COPY --from=builder /build/requirements.txt ./
+RUN pip install -r requirements.txt 
 
-COPY requirements.txt /app
-
-RUN pip install -r /app/requirements.txt
-
-ARG GRADER_VERSION=0.1.2
-
-COPY dist/grader-${GRADER_VERSION}-py3-none-any.whl /app
-
-RUN pip install /app/grader-${GRADER_VERSION}-py3-none-any.whl
+# we intentionally keep this section separated to prevent cache invalidation 
+# and all dependencies are being re-downloaded and re-installed due to small changes
+# in the grader package
+COPY --from=builder /build/dist/*.whl ./
+RUN pip install /app/*.whl
 
 ENTRYPOINT ["graderctl"]
 

@@ -3,7 +3,6 @@
 set -e
 
 HADOOP_VERSION=3.4.1
-GRADER_VERSION="0.1.2"
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-"node2.bdcl:5000"}
 BASE_IMAGE_NAME="${DOCKER_REGISTRY}/grader-hdfs-base:latest"
 DATANODE_IMAGE_NAME="${DOCKER_REGISTRY}/grader-hdfs-datanode:latest"
@@ -43,13 +42,7 @@ function push_hdfs_images {
 
 function build_app_image {
     echo "Building grader app Docker image..."
-
-    poetry export --without-hashes --format=requirements.txt > requirements.txt
-
-    poetry build
-    
-    docker build --build-arg "GRADER_VERSION=$GRADER_VERSION" -t "$GRADER_APP_IMAGE_NAME" -f ./docker/app.dockerfile .
-    
+    docker build -t "$GRADER_APP_IMAGE_NAME" -f ./docker/app.dockerfile .
     echo "Build completed successfully!"
 }
 
