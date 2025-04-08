@@ -97,19 +97,25 @@ def k8s():
 @click.option('--user-id', '-u', required=True, type=str, help='User ID for the task')
 @click.option('--name', '-n', type=str, help='Optional name for the task')
 @click.option('--tag', type=str, help='Optional tag for grouping tasks')
-@click.option_group(
-    'args_source',
-    mutually_exclusive=True,
-    help='Source of checker arguments (either direct JSON or file)',
-    cls=click.MutuallyExclusiveOptionGroup,
-    options=[
-        click.Option(['--args'], type=str, help='JSON string with arguments for the checker'),
-        click.Option(['--args-file'], type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker')
-    ]
-)
+@click.option('--args', type=str, help='JSON string with arguments for the checker. Mutually exclusive with --args-file')
+@click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
 def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str):
-    """Submit a new checking task."""
+    """Submit a new checking task.
+    
+    The checker arguments can be provided either:
+    - directly via --args as a JSON string
+    - through a JSON file specified with --args-file
+    
+    These options are mutually exclusive - you must use one or the other, not both.
+    """
     logger.info(f"Submitting new task for user {user_id} with check type {check_type}")
+    
+    # Check mutual exclusivity of args and args_file
+    if args and args_file:
+        error_msg = "Error: --args and --args-file are mutually exclusive. Please provide only one of them."
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+    
     try:
         checker_args = {}
         if args:
@@ -135,6 +141,11 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
         result = response.json()
         logger.info(f"Task submitted successfully with ID: {result.get('id')}")
         click.echo(json.dumps(result, indent=2))
+    except json.JSONDecodeError as e:
+        error_msg = f"Error: Invalid JSON format - {str(e)}"
+        logger.error(error_msg)
+        click.echo(error_msg, err=True)
+        sys.exit(1)
     except Exception as e:
         logger.error(f"Error submitting task: {str(e)}", exc_info=True)
         click.echo(f"Failed to submit task: {str(e)}", err=True)
