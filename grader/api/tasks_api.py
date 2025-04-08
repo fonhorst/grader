@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
-from typing import List, Optional
+from typing import Optional
 import uuid
 import logging
 
@@ -12,7 +12,6 @@ from grader.schemes import (
     TaskListResponse,
     HealthResponse
 )
-from grader.checking.checking import CheckType
 from grader.db.tasks import TaskStatus
 
 logger = logging.getLogger(__name__)

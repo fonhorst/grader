@@ -2,7 +2,6 @@ import argparse
 from enum import Enum
 import logging
 import sys
-from typing import Any, Dict
 from grader.checking.base import CheckerReport
 from grader.checking.ch_checker import ClickHouseChecker
 

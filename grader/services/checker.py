@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import uuid
 from datetime import datetime
@@ -10,7 +9,6 @@ from pydantic import BaseModel
 from grader.checking.checking import CheckType
 from grader.db.tasks import Task, TaskStatus, create_task, get_task, delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
 from grader.faststream_tasks.schemes import CheckingTask
-from grader.faststream_tasks.tasks import broker
 
 logger = logging.getLogger(__name__)
 

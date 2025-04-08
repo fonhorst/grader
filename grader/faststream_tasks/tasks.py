@@ -11,7 +11,7 @@ from faststream.rabbit.annotations import RabbitMessage
 from grader.checking.base import CheckerReport
 from grader.checking.checking import run_checking
 from grader.db.tasks import TaskStatus, get_task, update_task_status_with_isolation
-from grader.faststream_tasks.schemes import CheckingResult, CheckingTask, FastStreamCheckTaskException
+from grader.faststream_tasks.schemes import CheckingResult, CheckingTask
 
 used_run_checking = run_checking
 

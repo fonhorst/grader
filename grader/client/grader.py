@@ -1,10 +1,8 @@
-from typing import Optional, List
+from typing import Optional
 import uuid
 import asyncio
 import time
 import aiohttp
-from pydantic import BaseModel
-from datetime import datetime
 
 from grader.schemes import TaskListResponse, TaskReportResponse, TaskResponse, TaskSubmitRequest
 from grader.db.tasks import TaskStatus

@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 from abc import ABC, abstractmethod
 import logging
-import sys
-import argparse
 from clickhouse_driver import Client
-import pandas as pd
-import re
-from typing import List, Optional, Tuple, Any, Dict
+from typing import List, Optional, Tuple
 
 from grader.checking.base import CheckableQuery, CheckerReport
 

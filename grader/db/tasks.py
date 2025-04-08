@@ -3,13 +3,13 @@ import enum
 import logging
 import os
 import uuid
-from typing import Optional, Dict, Union, Any, List, cast, Tuple
+from typing import Optional, Dict, Union, Any, List, Tuple
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy import NullPool, String, UUID, TIMESTAMP, ForeignKey, delete, inspect, select
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy import NullPool, String, UUID, TIMESTAMP, delete, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, joinedload
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from grader.env import ENV_VAR_DB_CONN, ENV_VAR_ECHO_DB_QUERY
 
