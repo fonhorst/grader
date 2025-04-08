@@ -101,12 +101,14 @@ async def test_submit_task(test_client, monkeypatch, mock_task_info):
         response = test_client.post(
             "/tasks/",
             json={
-                "check_type": CheckType.CLICKHOUSE.value,
-                "args": {"host": "localhost"},
-                "name": "Test Task",
-                "tag": "test_tag"
-            },
-            headers={"user-id": "test_user"}
+                "request": {
+                    "check_type": CheckType.CLICKHOUSE.value,
+                    "args": {"host": "localhost"},
+                    "name": "Test Task",
+                    "tag": "test_tag"
+                },
+                "user_id": "test_user"
+            }
         )
         
         assert response.status_code == 201
