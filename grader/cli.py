@@ -104,7 +104,7 @@ def k8s():
 @click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
 @click.option('--wait', '-w', type=int, help='Wait for task completion (timeout in seconds, 0 for indefinite wait)')
 @click.option('--poll-interval', '-p', type=float, help='Poll interval for task completion in seconds. Default is 1.0 second.', default=1.0)
-def run(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float):
+def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float):
     """Submit a new checking task and optionally wait for completion."""
     logger.info(f"Running task for user {user_id} with check type {check_type}")
     
