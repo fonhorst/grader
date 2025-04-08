@@ -14,58 +14,62 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-# # Config class using pydantic for validation
-# class Config(BaseModel):
-#     api_base_url: str
-#     user_id: str
-#     project: str
+def get_api_url() -> str:
+    """Get the API URL from environment variable or use default."""
+    api_url = os.getenv('GRADER_API_URL', 'http://localhost:8080')
+    logger.info(f"Using API URL: {api_url}")
+    return api_url
 
 
-# # Load configuration from a `.grader` file
-# def load_config():
-#     if os.path.exists('.grader'):
-#         with open('.grader') as f:
-#             return Config(**yaml.safe_load(f))
-#     else:
-#         raise FileNotFoundError("Configuration file '.grader' not found.")
+def format_task_info(task_data: dict) -> str:
+    """Format task information in a human-readable way with colors."""
+    status = task_data.get('status', 'UNKNOWN')
+    status_color = {
+        'PENDING': 'yellow',
+        'RUNNING': 'blue',
+        'COMPLETED': 'green',
+        'FAILED': 'red',
+        'CANCELLED': 'red',
+        'ERROR': 'red'
+    }.get(status, 'white')
+
+    formatted = [
+        click.style(f"Task ID: {task_data.get('id')}", bold=True),
+        click.style(f"Status: {status}", fg=status_color, bold=True),
+        f"Name: {task_data.get('name', 'N/A')}",
+        f"User ID: {task_data.get('user_id', 'N/A')}",
+        f"Tag: {task_data.get('tag', 'N/A')}",
+        f"Submit Time: {task_data.get('submit_time', 'N/A')}",
+        f"End Time: {task_data.get('end_time', 'N/A')}"
+    ]
+    
+    return "\n".join(formatted)
 
 
-# # Context object to store config
-# class Context:
-#     def __init__(self):
-#         self.config = load_config()
-
-
-# pass_context = click.make_pass_decorator(Context, ensure=True)
-
+@click.group()
 @click.option('--verbose', is_flag=True, help='Enable verbose logging')
 def cli(verbose: bool):
+    """Grader CLI tool for managing and running checks."""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)", 
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
     if not verbose:
-        # Set higher log levels for HTTP client libraries to suppress request logs
-        # todo: a subject of being switched to INFO if user asks for more verbose logs with '--verbose' flag
         logging.getLogger("requests").setLevel(logging.WARNING)
         logging.getLogger("urllib3").setLevel(logging.WARNING)
         logging.getLogger("httpx").setLevel(logging.WARNING)
+    else:
+        # In verbose mode, set all loggers to DEBUG
+        logging.getLogger("requests").setLevel(logging.DEBUG)
+        logging.getLogger("urllib3").setLevel(logging.DEBUG)
+        logging.getLogger("httpx").setLevel(logging.DEBUG)
 
-    click.echo("Grader CLI")
+    logger.info("Starting Grader CLI")
     ctx = click.get_current_context()
-    if ctx.parent is None:  # Only log at the top level
+    if ctx.parent is None:
         logger.info(f"CLI invoked with args: {sys.argv}")
-    pass
-
-
-# # Main group command 'tasks' with alias 'task'
-# @cli.group(invoke_without_command=True, cls=click.Group, )
-# @pass_context
-# def task(ctx):
-#     """Task management utility."""
-#     click.echo("Task management utility loaded.")
 
 
 @cli.group()
@@ -104,16 +108,15 @@ def k8s():
     ]
 )
 def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str):
-    """Submit a new checking task.
-    
-    The checker arguments can be provided either directly via --args as a JSON string,
-    or through a JSON file specified with --args-file. These options are mutually exclusive.
-    """
+    """Submit a new checking task."""
+    logger.info(f"Submitting new task for user {user_id} with check type {check_type}")
     try:
         checker_args = {}
         if args:
+            logger.debug("Parsing args from command line JSON string")
             checker_args = json.loads(args)
         elif args_file:
+            logger.debug(f"Loading args from file: {args_file}")
             with open(args_file) as f:
                 checker_args = json.load(f)
         
@@ -124,11 +127,18 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
             "tag": tag,
             "args": checker_args
         }
-        response = requests.post("http://localhost:8000/tasks/", json=data)
+        logger.info(f"Submitting task with data: {data}")
+        
+        api_url = get_api_url()
+        response = requests.post(f"{api_url}/tasks/", json=data)
         response.raise_for_status()
-        click.echo(json.dumps(response.json(), indent=2))
+        result = response.json()
+        logger.info(f"Task submitted successfully with ID: {result.get('id')}")
+        click.echo(json.dumps(result, indent=2))
     except Exception as e:
-        click.echo(f"Error submitting task: {str(e)}", err=True)
+        logger.error(f"Error submitting task: {str(e)}", exc_info=True)
+        click.echo(f"Failed to submit task: {str(e)}", err=True)
+        sys.exit(1)
 
 
 @task.command()
@@ -136,10 +146,8 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
 @click.option('--tag', '-t', type=str, help='Filter tasks by tag')
 @click.option('--status', '-s', type=str, help='Filter tasks by status')
 def list(user_id: str, tag: str, status: str):
-    """List tasks with optional filtering.
-    
-    All filter parameters are optional. If none are provided, all tasks will be listed.
-    """
+    """List tasks with optional filtering."""
+    logger.info("Listing tasks with filters")
     try:
         params = {}
         if user_id is not None:
@@ -148,63 +156,48 @@ def list(user_id: str, tag: str, status: str):
             params['tag'] = tag
         if status is not None:
             params['status'] = status
-            
-        response = requests.get("http://localhost:8000/tasks/", params=params)
+        
+        logger.info(f"Using filter params: {params}")
+        api_url = get_api_url()
+        response = requests.get(f"{api_url}/tasks/", params=params)
         response.raise_for_status()
-        click.echo(json.dumps(response.json(), indent=2))
+        result = response.json()
+        logger.info(f"Found {len(result.get('tasks', []))} tasks")
+        click.echo(json.dumps(result, indent=2))
     except Exception as e:
-        click.echo(f"Error listing tasks: {str(e)}", err=True)
+        logger.error(f"Error listing tasks: {str(e)}", exc_info=True)
+        click.echo(f"Failed to list tasks: {str(e)}", err=True)
+        sys.exit(1)
 
-def format_task_info(task_data: dict) -> str:
-    """Format task information in a human-readable way with colors."""
-    status = task_data.get('status', 'UNKNOWN')
-    status_color = {
-        'PENDING': 'yellow',
-        'RUNNING': 'blue',
-        'COMPLETED': 'green',
-        'FAILED': 'red',
-        'CANCELLED': 'red',
-        'ERROR': 'red'
-    }.get(status, 'white')
-
-    formatted = [
-        click.style(f"Task ID: {task_data.get('id')}", bold=True),
-        click.style(f"Status: {status}", fg=status_color, bold=True),
-        f"Name: {task_data.get('name', 'N/A')}",
-        f"User ID: {task_data.get('user_id', 'N/A')}",
-        f"Tag: {task_data.get('tag', 'N/A')}",
-        f"Submit Time: {task_data.get('submit_time', 'N/A')}",
-        f"End Time: {task_data.get('end_time', 'N/A')}"
-    ]
-    
-    return "\n".join(formatted)
 
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to retrieve')
 @click.option('--json-file', type=click.Path(dir_okay=False), help='Save task info to this JSON file')
 @click.option('--report-file', type=click.Path(dir_okay=False), help='Save task report to this Markdown file if available')
 def get(task_id: str, json_file: str, report_file: str):
-    """Get information about a specific task.
-    
-    Displays task information in a human-readable format with color highlighting.
-    Optionally saves the raw data to a JSON file and/or the report to a Markdown file.
-    """
+    """Get information about a specific task."""
+    logger.info(f"Getting task info for ID: {task_id}")
     try:
-        response = requests.get(f"http://localhost:8000/tasks/{task_id}")
+        api_url = get_api_url()
+        response = requests.get(f"{api_url}/tasks/{task_id}")
         response.raise_for_status()
         task_data = response.json()
+        
+        logger.debug(f"Retrieved task data: {task_data}")
         
         # Print formatted task info
         click.echo(format_task_info(task_data))
         
         # Save JSON if requested
         if json_file:
+            logger.debug(f"Saving task info to JSON file: {json_file}")
             with open(json_file, 'w') as f:
                 json.dump(task_data, f, indent=2)
             click.echo(f"\nTask info saved to {json_file}")
         
         # Save report if requested and available
         if report_file and task_data.get('report'):
+            logger.debug(f"Saving report to file: {report_file}")
             with open(report_file, 'w') as f:
                 f.write(task_data['report'])
             click.echo(f"Report saved to {report_file}")
@@ -212,72 +205,88 @@ def get(task_id: str, json_file: str, report_file: str):
             click.echo("\nNo report available for this task", err=True)
             
     except Exception as e:
-        click.echo(f"Error getting task: {str(e)}", err=True)
+        logger.error(f"Error getting task: {str(e)}", exc_info=True)
+        click.echo(f"Failed to get task: {str(e)}", err=True)
+        sys.exit(1)
+
 
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to cancel')
 @click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
 def cancel(task_id: str, json_file: str):
     """Cancel a running task."""
+    logger.info(f"Canceling task with ID: {task_id}")
     try:
-        response = requests.post(f"http://localhost:8000/tasks/{task_id}/cancel")
+        api_url = get_api_url()
+        response = requests.post(f"{api_url}/tasks/{task_id}/cancel")
         response.raise_for_status()
         task_data = response.json()
+        
+        logger.debug(f"Task cancel response: {task_data}")
         
         # Print formatted task info
         click.echo(format_task_info(task_data))
         
         # Save JSON if requested
         if json_file:
+            logger.debug(f"Saving response to JSON file: {json_file}")
             with open(json_file, 'w') as f:
                 json.dump(task_data, f, indent=2)
             click.echo(f"\nResponse saved to {json_file}")
             
     except Exception as e:
-        click.echo(f"Error canceling task: {str(e)}", err=True)
+        logger.error(f"Error canceling task: {str(e)}", exc_info=True)
+        click.echo(f"Failed to cancel the task: {str(e)}", err=True)
+        sys.exit(1)
+
 
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to delete')
 @click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
 def delete(task_id: str, json_file: str):
     """Delete a task."""
+    logger.info(f"Deleting task with ID: {task_id}")
     try:
-        response = requests.delete(f"http://localhost:8000/tasks/{task_id}")
+        api_url = get_api_url()
+        response = requests.delete(f"{api_url}/tasks/{task_id}")
         response.raise_for_status()
         task_data = response.json()
+        
+        logger.debug(f"Task deletion response: {task_data}")
         
         # Print formatted task info
         click.echo(format_task_info(task_data))
         
         # Save JSON if requested
         if json_file:
+            logger.debug(f"Saving response to JSON file: {json_file}")
             with open(json_file, 'w') as f:
                 json.dump(task_data, f, indent=2)
             click.echo(f"\nResponse saved to {json_file}")
             
     except Exception as e:
-        click.echo(f"Error deleting task: {str(e)}", err=True)
+        logger.error(f"Error deleting task: {str(e)}", exc_info=True)
+        click.echo(f"Failed to delete the task: {str(e)}", err=True)
+        sys.exit(1)
 
 
-# TODO: save the report to a markdown file instead of JSON
-# TODO: if report is not available, print an error message and specify the task status
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to get report for')
 @click.option('--output-file', '-o', type=click.Path(dir_okay=False), required=True, help='Save report to this file (Markdown format)')
 def report(task_id: str, output_file: str):
-    """Get the report from a finished task.
-    
-    Saves the report to the specified file in Markdown format.
-    If the report is not available, displays the task status and an error message.
-    """
+    """Get the report from a finished task."""
+    logger.info(f"Getting report for task ID: {task_id}")
     try:
+        api_url = get_api_url()
+        
         # First get task info to check status
-        task_response = requests.get(f"http://localhost:8000/tasks/{task_id}")
+        task_response = requests.get(f"{api_url}/tasks/{task_id}")
         task_response.raise_for_status()
         task_data = task_response.json()
+        logger.debug(f"Retrieved task data: {task_data}")
         
         # Get report
-        report_response = requests.get(f"http://localhost:8000/tasks/{task_id}/report")
+        report_response = requests.get(f"{api_url}/tasks/{task_id}/report")
         report_response.raise_for_status()
         report_data = report_response.json()
         
@@ -287,19 +296,17 @@ def report(task_id: str, output_file: str):
             return
         
         # Save report in markdown format
+        logger.debug(f"Saving report to file: {output_file}")
         with open(output_file, 'w') as f:
             f.write(report_data['report'])
         click.echo(f"Report saved to {output_file}")
         
     except Exception as e:
-        click.echo(f"Error getting report: {str(e)}", err=True)
+        logger.error(f"Error getting report: {str(e)}", exc_info=True)
+        click.echo(f"Failed to get the report: {str(e)}", err=True)
+        sys.exit(1)
 
 
-# TODO: add another universal command for running an arbitrary checker directly from the CLI
-# Here is the example of how it should work:
-# grader checker run --checker=<fully qualified name of the checker class> --arguments=<path to a json file with checker arguments> --output="Output path for the report in .md format"
-
-# TODO: remove --output-json and --output-markdown options from the command. Add --output option instead. We only allow Markdown output for now.
 @checker.command()
 @click.option('--host', '-h', default="localhost", show_default=True, help='ClickHouse host address')
 @click.option('--user', '-u', default="admin", show_default=True, help='Admin username')
@@ -344,6 +351,7 @@ def clickhouse(host: str, user: str, student: str, cluster_name: str, output: st
         click.echo(f"Error running checker: {str(e)}", err=True)
         exit(1)
 
+
 @checker.command()
 @click.option('--checker', required=True, type=str, help='Fully qualified name of the checker class (e.g. grader.checking.ch_checker.ClickHouseChecker)')
 @click.option('--arguments', required=True, type=click.Path(exists=True, dir_okay=False), help='Path to JSON file with checker arguments')
@@ -382,36 +390,34 @@ def run(checker: str, arguments: str, output: str):
         
     except Exception as e:
         click.echo(f"Error running checker: {str(e)}", err=True)
-        exit(1)
+        sys.exit(1)
 
 
-# TODO: add swagger UI endpoint to the API server
 @api.command()
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
 @click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')
 @click.option('--reload', '-r', is_flag=True, help='Enable auto-reload on code changes')
 def start(host: str, port: int, reload: bool):
-    """Start the REST API server.
-    
-    Starts a Uvicorn server for the REST API. The server can be configured to
-    auto-reload on code changes using the --reload flag.
-    """
+    """Start the REST API server."""
+    logger.info(f"Starting API server on {host}:{port}")
     import uvicorn
     from grader.app import app
     
+    logger.info("API server configured with Swagger UI at /docs")
     try:
         uvicorn.run(
             app,
             host=host,
             port=port,
-            reload=reload
+            reload=reload,
+            log_level="debug" if logger.getEffectiveLevel() <= logging.DEBUG else "info"
         )
     except Exception as e:
-        click.echo(f"Error starting API server: {str(e)}", err=True)
-        exit(1)
+        logger.error(f"Error starting API server: {str(e)}", exc_info=True)
+        click.echo(f"Failed to start API server: {str(e)}", err=True)
+        sys.exit(1)
 
 
-# TODO: add a command 'install-script' that will generate a bash script for installing all the components on Kubernetes
 @k8s.command()
 def info():
     """Show instructions for installing components on Kubernetes."""
@@ -463,6 +469,7 @@ Notes:
 - For troubleshooting: kubectl describe pod <pod-name>
 """
     click.echo(instructions)
+
 
 @k8s.command()
 @click.option('--output', '-o', type=click.Path(dir_okay=False), required=True, help='Path to save the installation script')
@@ -555,5 +562,7 @@ Pod details:         kubectl describe pod -n grader <pod-name>
     except Exception as e:
         click.echo(f"Error creating installation script: {str(e)}", err=True)
 
+
 if __name__ == "__main__":
     cli()
+
