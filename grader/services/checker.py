@@ -1,17 +1,14 @@
 import asyncio
 import logging
-from typing import Optional, List, Dict, Any, Union
 import uuid
 from datetime import datetime
+from typing import Optional, List, Dict, Any, Union
 
 from faststream.rabbit import RabbitBroker
 from pydantic import BaseModel
 
 from grader.checking.checking import CheckType
-from grader.db.tasks import (
-    Task, TaskStatus, create_task, get_task,
-    delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
-)
+from grader.db.tasks import Task, TaskStatus, create_task, get_task, delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
 from grader.faststream_tasks.schemes import CheckingTask
 from grader.faststream_tasks.tasks import broker
 

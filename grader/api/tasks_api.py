@@ -14,8 +14,10 @@ from grader.db.tasks import TaskStatus
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+
 def get_checker_service() -> CheckerService:
     return CheckerService()
+
 
 def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:
     """Convert TaskInfo to TaskResponse."""
@@ -31,6 +33,7 @@ def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:
         end_time=task_info.end_time,
         report=task_info.report
     )
+
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def submit_task(
@@ -56,6 +59,7 @@ async def submit_task(
             detail=str(e)
         )
 
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: uuid.UUID,
@@ -72,6 +76,7 @@ async def get_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task not found: {str(e)}"
         )
+
 
 @router.get("/", response_model=TaskListResponse)
 async def list_tasks(
@@ -96,6 +101,7 @@ async def list_tasks(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+    
 
 @router.post("/{task_id}/cancel")
 async def cancel_task(
@@ -119,6 +125,7 @@ async def cancel_task(
             detail=str(e)
         )
 
+
 @router.delete("/{task_id}")
 async def delete_task(
     task_id: uuid.UUID,
@@ -135,6 +142,7 @@ async def delete_task(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
 
 @router.get("/{task_id}/report", response_model=dict)
 async def get_task_report(
@@ -159,9 +167,11 @@ async def get_task_report(
             detail=str(e)
         )
 
+
 @router.get("/health", response_model=HealthResponse)
 async def health_check() -> HealthResponse:
     """
     Check the health of the service.
     """
     return HealthResponse()
+
