@@ -1,0 +1,78 @@
+{{- if .Values.rabbitmq.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grader-chart.fullname" . }}-rabbitmq
+  labels:
+    {{- include "grader-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grader-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: rabbitmq
+  template:
+    metadata:
+      labels:
+        {{- include "grader-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.rabbitmq.image.repository }}:{{ .Values.rabbitmq.image.tag }}"
+          imagePullPolicy: {{ .Values.rabbitmq.image.pullPolicy }}
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: {{ .Values.rabbitmq.auth.username | quote }}
+            - name: RABBITMQ_DEFAULT_PASS
+              value: {{ .Values.rabbitmq.auth.password | quote }}
+          ports:
+            - name: amqp
+              containerPort: {{ .Values.rabbitmq.service.amqpPort }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.rabbitmq.service.managementPort }}
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: {{ .Values.rabbitmq.configuration.configPath }}
+              subPath: rabbitmq.conf
+            - name: plugins
+              mountPath: {{ .Values.rabbitmq.configuration.pluginsPath }}
+              subPath: enabled_plugins
+            - name: consumer-settings
+              mountPath: {{ .Values.rabbitmq.configuration.consumerSettingsPath }}
+              subPath: consumer-settings.conf
+          resources:
+            {{- toYaml .Values.rabbitmq.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          {{- if .Values.rabbitmq.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "grader-chart.fullname" . }}-rabbitmq
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config
+          configMap:
+            name: {{ include "grader-chart.fullname" . }}-rabbitmq-config
+        - name: plugins
+          configMap:
+            name: {{ include "grader-chart.fullname" . }}-rabbitmq-plugins
+        - name: consumer-settings
+          configMap:
+            name: {{ include "grader-chart.fullname" . }}-rabbitmq-consumer-settings
+{{- end }} 

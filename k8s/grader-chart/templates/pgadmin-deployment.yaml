@@ -1,0 +1,45 @@
+{{- if .Values.pgadmin.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grader-chart.fullname" . }}-pgadmin
+  labels:
+    {{- include "grader-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "grader-chart.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pgadmin
+  template:
+    metadata:
+      labels:
+        {{- include "grader-chart.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pgadmin
+    spec:
+      containers:
+        - name: pgadmin
+          image: "{{ .Values.pgadmin.image.repository }}:{{ .Values.pgadmin.image.tag }}"
+          imagePullPolicy: {{ .Values.pgadmin.image.pullPolicy }}
+          env:
+            - name: PGADMIN_DEFAULT_EMAIL
+              value: {{ .Values.pgadmin.auth.email | quote }}
+            - name: PGADMIN_DEFAULT_PASSWORD
+              value: {{ .Values.pgadmin.auth.password | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.pgadmin.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/pgadmin
+      volumes:
+        - name: data
+          {{- if .Values.pgadmin.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "grader-chart.fullname" . }}-pgadmin
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+{{- end }} 

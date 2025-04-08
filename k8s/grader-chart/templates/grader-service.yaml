@@ -5,9 +5,9 @@ metadata:
   labels:
     {{- include "grader-chart.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.grader.service.type }}
   ports:
-    - port: {{ .Values.service.port }}
+    - port: {{ .Values.grader.service.port }}
       targetPort: http
       protocol: TCP
       name: http

@@ -1,0 +1,16 @@
+{{- if and .Values.pgadmin.enabled .Values.pgadmin.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "grader-chart.fullname" . }}-pgadmin
+  labels:
+    {{- include "grader-chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pgadmin
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.pgadmin.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.pgadmin.persistence.size }}
+{{- end }} 
