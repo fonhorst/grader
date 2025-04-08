@@ -33,7 +33,7 @@ from datetime import datetime
 
 # pass_context = click.make_pass_decorator(Context, ensure=True)
 
-
+# TODO: add logging the full CLI command and its arguments being executed
 @click.group()
 def cli():
     pass
@@ -56,13 +56,16 @@ def task():
 def checker():
     pass
 
+
 @cli.group()
 def api():
     pass
 
+
 @cli.group()
 def k8s():
     pass
+
 
 @task.command()
 @click.option('--check-type', '-t', required=True, type=str, help='Type of check to perform (e.g. "clickhouse")')
@@ -106,6 +109,7 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
     except Exception as e:
         click.echo(f"Error submitting task: {str(e)}", err=True)
 
+
 @task.command()
 @click.option('--user-id', '-u', type=str, help='Filter tasks by user ID')
 @click.option('--tag', '-t', type=str, help='Filter tasks by tag')
@@ -116,6 +120,7 @@ def list(user_id: str, tag: str, status: str):
     All filter parameters are optional. If none are provided, all tasks will be listed.
     """
     try:
+        # TODO: DO NOT use locals() here, build a proper params dict instead with explicit keys
         params = {k: v for k, v in locals().items() if v is not None}
         response = requests.get("http://localhost:8000/tasks/", params=params)
         response.raise_for_status()
@@ -123,6 +128,10 @@ def list(user_id: str, tag: str, status: str):
     except Exception as e:
         click.echo(f"Error listing tasks: {str(e)}", err=True)
 
+# TODO: format beautifully in a human-readable format the info about the task and print it on screen 
+# (use different colors to highlight the most important fields like id, status, name. BAD statuses should be RED)
+# TODO: add an option to save the info to a json file, but make printing the default behavior
+# TODO: add an option to save report to a markdown file if it is available. DO NOT print report on the screen in any sutuations.
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to retrieve')
 def get(task_id: str):
@@ -134,6 +143,8 @@ def get(task_id: str):
     except Exception as e:
         click.echo(f"Error getting task: {str(e)}", err=True)
 
+
+# TODO:work with the status the same way as described in the TODO for the get command
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to cancel')
 def cancel(task_id: str):
@@ -145,6 +156,8 @@ def cancel(task_id: str):
     except Exception as e:
         click.echo(f"Error canceling task: {str(e)}", err=True)
 
+
+# TODO:work with the status the same way as described in the TODO for the get command
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to delete')
 def delete(task_id: str):
@@ -156,6 +169,9 @@ def delete(task_id: str):
     except Exception as e:
         click.echo(f"Error deleting task: {str(e)}", err=True)
 
+
+# TODO: save the report to a markdown file instead of JSON
+# TODO: if report is not available, print an error message and specify the task status
 @task.command()
 @click.option('--task-id', '-i', required=True, type=str, help='ID of the task to get report for')
 @click.option('--output-file', '-o', type=click.Path(dir_okay=False), help='Save report to this file (JSON format)')
@@ -178,6 +194,7 @@ def report(task_id: str, output_file: str):
             click.echo(json.dumps(report_data, indent=2))
     except Exception as e:
         click.echo(f"Error getting report: {str(e)}", err=True)
+
 
 @checker.command()
 @click.option('--host', '-h', default="localhost", show_default=True, help='ClickHouse host address')
