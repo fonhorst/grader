@@ -196,7 +196,11 @@ def report(task_id: str, output_file: str):
         click.echo(f"Error getting report: {str(e)}", err=True)
 
 
-@checker.command()
+# TODO: add another universal command for running an arbitrary checker directly from the CLI
+# Here is the example of how it should work:
+# grader checker run --checker=<fully qualified name of the checker class> --arguments=<path to a json file with checker arguments> --output="Output path for the report in .md format"
+
+# TODO: remove --output-json and --output-markdown options from the command. Add --output option instead. We only allow Markdown output for now.
 @click.option('--host', '-h', default="localhost", show_default=True, help='ClickHouse host address')
 @click.option('--user', '-u', default="admin", show_default=True, help='Admin username')
 @click.option('--student', '-s', required=True, help='Student username to check')
@@ -246,9 +250,11 @@ def clickhouse(host: str, user: str, student: str, cluster_name: str, output_jso
         click.echo(f"Error running checker: {str(e)}", err=True)
         exit(1)
 
+
+# TODO: add swagger UI endpoint to the API server
 @api.command()
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
-@click.option('--port', '-p', default=8000, show_default=True, type=int, help='Port to listen on')
+@click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')
 @click.option('--reload', '-r', is_flag=True, help='Enable auto-reload on code changes')
 def start(host: str, port: int, reload: bool):
     """Start the REST API server.
@@ -257,11 +263,11 @@ def start(host: str, port: int, reload: bool):
     auto-reload on code changes using the --reload flag.
     """
     import uvicorn
-    from grader.api.app import app
+    from grader.app import app
     
     try:
         uvicorn.run(
-            "grader.api.app:app",
+            app,
             host=host,
             port=port,
             reload=reload
@@ -270,6 +276,8 @@ def start(host: str, port: int, reload: bool):
         click.echo(f"Error starting API server: {str(e)}", err=True)
         exit(1)
 
+
+# TODO: add a command 'install-script' that will generate a bash script for installing all the components on Kubernetes
 @k8s.command()
 def info():
     """Show instructions for installing components on Kubernetes."""
