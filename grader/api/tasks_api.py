@@ -4,6 +4,8 @@ import uuid
 
 from grader.services.checker import CheckerService, TaskInfo
 from grader.api.schemes import (
+    MessageResponse,
+    TaskReportResponse,
     TaskSubmitRequest,
     TaskResponse,
     TaskListResponse,
@@ -103,11 +105,11 @@ async def list_tasks(
         )
     
 
-@router.post("/{task_id}/cancel")
+@router.post("/{task_id}/cancel", response_model=MessageResponse)
 async def cancel_task(
     task_id: uuid.UUID,
     checker_service: CheckerService = Depends(get_checker_service)
-):
+) -> MessageResponse:
     """
     Cancel a running task.
     """
@@ -118,7 +120,7 @@ async def cancel_task(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Task could not be cancelled"
             )
-        return {"message": "Task cancelled successfully"}
+        return MessageResponse(message="Task cancelled successfully")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -126,17 +128,17 @@ async def cancel_task(
         )
 
 
-@router.delete("/{task_id}")
+@router.delete("/{task_id}", response_model=MessageResponse)
 async def delete_task(
     task_id: uuid.UUID,
     checker_service: CheckerService = Depends(get_checker_service)
-):
+) -> MessageResponse:
     """
     Delete a task.
     """
     try:
         await checker_service.delete(task_id)
-        return {"message": "Task deleted successfully"}
+        return MessageResponse(message="Task deleted successfully")
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -144,11 +146,11 @@ async def delete_task(
         )
 
 
-@router.get("/{task_id}/report", response_model=dict)
+@router.get("/{task_id}/report", response_model=TaskReportResponse)
 async def get_task_report(
     task_id: uuid.UUID,
     checker_service: CheckerService = Depends(get_checker_service)
-) -> dict:
+) -> TaskReportResponse:
     """
     Get the report from a finished task.
     """
@@ -159,8 +161,7 @@ async def get_task_report(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Report not found or task not completed"
             )
-        # Assuming report is a JSON string
-        return {"report": task_info.report}
+        return TaskReportResponse(report=task_info.report)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -5,11 +5,63 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from faststream.rabbit import TestRabbitBroker
 
-from grader.api.tasks_api import router as tasks_router
+from grader.api.tasks_api import router as tasks_router, get_checker_service
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
 from grader.services.checker import TaskInfo, CheckerService
+
+
+class MockCheckerService:
+    """Mock implementation of CheckerService for testing."""
+    
+    def __init__(self, mock_task_info: TaskInfo):
+        self.mock_task_info = mock_task_info
+        self.mock_task_list = [mock_task_info]
+    
+    async def submit(self, *args, **kwargs) -> TaskInfo:
+        return self.mock_task_info
+    
+    async def status(self, task_id: uuid.UUID) -> TaskInfo:
+        if str(task_id) == str(self.mock_task_info.id):
+            return self.mock_task_info
+        raise ValueError("Task not found")
+    
+    async def list(self, *args, **kwargs) -> list[TaskInfo]:
+        return self.mock_task_list
+    
+    async def cancel(self, task_id: uuid.UUID) -> bool:
+        return True
+    
+    async def delete(self, task_id: uuid.UUID) -> None:
+        pass
+
+
+class MockCheckerServiceWithFailures(MockCheckerService):
+    """Mock implementation that simulates failures."""
+    
+    async def cancel(self, task_id: uuid.UUID) -> bool:
+        return False
+    
+    async def status(self, task_id: uuid.UUID) -> TaskInfo:
+        raise ValueError("Task not found")
+
+
+class MockCheckerServiceNoReport(MockCheckerService):
+    """Mock implementation for a task without a report."""
+    
+    def __init__(self):
+        self.mock_task_info = TaskInfo(
+            id=uuid.uuid4(),
+            user_id="test_user",
+            name="Test Task",
+            tag="test_tag",
+            status=TaskStatus.RUNNING.value,
+            status_updated_at=datetime.now(),
+            submit_time=datetime.now(),
+            report=None
+        )
+
 
 # Create test app
 app = FastAPI()
@@ -41,13 +93,10 @@ def mock_task_info():
 @pytest.mark.asyncio
 async def test_submit_task(test_client, monkeypatch, mock_task_info):
     """Test submitting a new task."""
-    
-    async def mock_submit(*args, **kwargs):
-        return mock_task_info
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        # Mock the submit method of CheckerService
-        m.setattr(CheckerService, "submit", mock_submit)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.post(
             "/tasks/",
@@ -70,12 +119,10 @@ async def test_submit_task(test_client, monkeypatch, mock_task_info):
 @pytest.mark.asyncio
 async def test_get_task(test_client, monkeypatch, mock_task_info):
     """Test getting task information."""
-    
-    async def mock_status(*args, **kwargs):
-        return mock_task_info
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "status", mock_status)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.get(f"/tasks/{mock_task_info.id}")
         
@@ -89,12 +136,10 @@ async def test_get_task(test_client, monkeypatch, mock_task_info):
 @pytest.mark.asyncio
 async def test_list_tasks(test_client, monkeypatch, mock_task_info):
     """Test listing tasks with filters."""
-    
-    async def mock_list(*args, **kwargs):
-        return [mock_task_info]
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "list", mock_list)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         # Test without filters
         response = test_client.get("/tasks/")
@@ -116,46 +161,40 @@ async def test_list_tasks(test_client, monkeypatch, mock_task_info):
 @pytest.mark.asyncio
 async def test_cancel_task(test_client, monkeypatch, mock_task_info):
     """Test cancelling a task."""
-    
-    async def mock_cancel(*args, **kwargs):
-        return True
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "cancel", mock_cancel)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.post(f"/tasks/{mock_task_info.id}/cancel")
         
         assert response.status_code == 200
         data = response.json()
-        # assert data["message"] == "Task cancelled successfully"
+        assert data["message"] == "Task cancelled successfully"
 
 
 @pytest.mark.asyncio
 async def test_delete_task(test_client, monkeypatch, mock_task_info):
     """Test deleting a task."""
-    
-    async def mock_delete(*args, **kwargs):
-        return None
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "delete", mock_delete)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.delete(f"/tasks/{mock_task_info.id}")
         
         assert response.status_code == 200
         data = response.json()
-        # assert data["message"] == "Task deleted successfully"
+        assert data["message"] == "Task deleted successfully"
 
 
 @pytest.mark.asyncio
 async def test_get_task_report(test_client, monkeypatch, mock_task_info):
     """Test getting task report."""
-    
-    async def mock_status(*args, **kwargs):
-        return mock_task_info
+    mock_service = MockCheckerService(mock_task_info)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "status", mock_status)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.get(f"/tasks/{mock_task_info.id}/report")
         
@@ -170,12 +209,10 @@ async def test_get_task_report(test_client, monkeypatch, mock_task_info):
 @pytest.mark.asyncio
 async def test_get_nonexistent_task(test_client, monkeypatch):
     """Test getting a task that doesn't exist."""
-    
-    async def mock_status(*args, **kwargs):
-        raise ValueError("Task not found")
+    mock_service = MockCheckerServiceWithFailures(None)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "status", mock_status)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.get(f"/tasks/{uuid.uuid4()}")
         assert response.status_code == 404
@@ -186,12 +223,10 @@ async def test_get_nonexistent_task(test_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_cancel_failed_task(test_client, monkeypatch):
     """Test cancelling a task that can't be cancelled."""
-    
-    async def mock_cancel(*args, **kwargs):
-        return False
+    mock_service = MockCheckerServiceWithFailures(None)
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "cancel", mock_cancel)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
         response = test_client.post(f"/tasks/{uuid.uuid4()}/cancel")
         assert response.status_code == 400
@@ -202,25 +237,14 @@ async def test_cancel_failed_task(test_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_get_report_no_report(test_client, monkeypatch):
     """Test getting report for a task that doesn't have one."""
-    
-    task_info = TaskInfo(
-        id=uuid.uuid4(),
-        user_id="test_user",
-        name="Test Task",
-        tag="test_tag",
-        status=TaskStatus.RUNNING.value,
-        status_updated_at=datetime.now(),
-        submit_time=datetime.now(),
-        report=None
-    )
-    
-    async def mock_status(*args, **kwargs):
-        return task_info
+    mock_service = MockCheckerServiceNoReport()
     
     with monkeypatch.context() as m:
-        m.setattr(CheckerService, "status", mock_status)
+        m.setattr("grader.api.tasks_api.get_checker_service", lambda: mock_service)
         
-        response = test_client.get(f"/tasks/{task_info.id}/report")
+        response = test_client.get(f"/tasks/{mock_service.mock_task_info.id}/report")
         assert response.status_code == 404
         data = response.json()
-        assert "Report not found or task not completed" in data["detail"] 
+        assert "Report not found or task not completed" in data["detail"]
+
+ 
