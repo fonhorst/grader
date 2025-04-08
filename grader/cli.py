@@ -1,3 +1,5 @@
+import logging
+import sys
 import click
 import yaml
 import requests
@@ -7,6 +9,9 @@ import os
 import json
 import uuid
 from datetime import datetime
+
+
+logger = logging.getLogger(__name__)
 
 
 # # Config class using pydantic for validation
@@ -33,9 +38,25 @@ from datetime import datetime
 
 # pass_context = click.make_pass_decorator(Context, ensure=True)
 
-# TODO: add logging the full CLI command and its arguments being executed
-@click.group()
-def cli():
+@click.option('--verbose', is_flag=True, help='Enable verbose logging')
+def cli(verbose: bool):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)", 
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    if not verbose:
+        # Set higher log levels for HTTP client libraries to suppress request logs
+        # todo: a subject of being switched to INFO if user asks for more verbose logs with '--verbose' flag
+        logging.getLogger("requests").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    click.echo("Grader CLI")
+    ctx = click.get_current_context()
+    if ctx.parent is None:  # Only log at the top level
+        logger.info(f"CLI invoked with args: {sys.argv}")
     pass
 
 
