@@ -167,4 +167,6 @@ checker_report.json
 checker_report.md
 
 log.txt
+requirements.txt
+dist/
 

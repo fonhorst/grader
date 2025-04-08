@@ -42,7 +42,6 @@ pyarrow = "^19.0.1"
 aio-pika = "^9.5.5"
 
 [tool.poetry.scripts]
-grader = "grader.main:main"
 graderctl = "grader.cli:cli"
 
 [tool.pytest.ini_options]

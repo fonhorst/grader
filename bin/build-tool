@@ -3,9 +3,13 @@
 set -e
 
 HADOOP_VERSION=3.4.1
-BASE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-base:latest"
-DATANODE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-datanode:latest"
-NAMENODE_IMAGE_NAME="node2.bdcl:5000/grader-hdfs-namenode:latest"
+GRADER_VERSION="0.1.2"
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-"node2.bdcl:5000"}
+BASE_IMAGE_NAME="${DOCKER_REGISTRY}/grader-hdfs-base:latest"
+DATANODE_IMAGE_NAME="${DOCKER_REGISTRY}/grader-hdfs-datanode:latest"
+NAMENODE_IMAGE_NAME="${DOCKER_REGISTRY}/grader-hdfs-namenode:latest"
+GRADER_APP_IMAGE_NAME="${DOCKER_REGISTRY}/grader-app:latest"
+
 
 function show_usage {
     echo "Usage: $0 [command]"
@@ -13,6 +17,8 @@ function show_usage {
     echo "Commands:"
     echo "  build-hdfs-images    Build all HDFS Docker images (base, datanode, namenode)"
     echo "  push-hdfs-images     Push the built HDFS Docker images to the registry"
+    echo "  build-app-image      Build the grader app Docker image"
+    echo "  push-app-image       Push the grader app Docker image to the registry"
     echo "  help                 Show this help message"
 }
 
@@ -35,6 +41,24 @@ function push_hdfs_images {
     echo "Push completed successfully!"
 }
 
+function build_app_image {
+    echo "Building grader app Docker image..."
+
+    poetry export --without-hashes --format=requirements.txt > requirements.txt
+
+    poetry build
+    
+    docker build --build-arg "GRADER_VERSION=$GRADER_VERSION" -t "$GRADER_APP_IMAGE_NAME" -f ./docker/app.dockerfile .
+    
+    echo "Build completed successfully!"
+}
+
+function push_app_image {
+    echo "Pushing grader app Docker image..."
+    docker push "$GRADER_APP_IMAGE_NAME"
+    echo "Push completed successfully!"
+}
+
 function main {
     # Main CLI logic
     if [ $# -eq 0 ]; then
@@ -48,6 +72,12 @@ function main {
             ;;
         push-hdfs-images)
             push_hdfs_images
+            ;;
+        build-app-image)
+            build_app_image
+            ;;
+        push-app-image)
+            push_app_image
             ;;
         help)
             show_usage
