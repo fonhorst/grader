@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "grader-chart.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "grader-chart.selectorLabels" . | nindent 6 }}
