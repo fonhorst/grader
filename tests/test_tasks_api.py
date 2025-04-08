@@ -139,7 +139,7 @@ async def test_list_tasks(mock_task_info):
     assert data["tasks"][0]["id"] == str(mock_task_info.id)
     
     # Test with filters
-    response = test_client.get("/tasks/?user_id=test_user&tag=test_tag&status=FINISHED")
+    response = test_client.get(f"/tasks/?user_id=test_user&tag=test_tag&status={TaskStatus.FINISHED.value}")
     assert response.status_code == 200
     data = response.json()
     assert len(data["tasks"]) == 1
