@@ -167,6 +167,106 @@ The services will be available at:
 - RabbitMQ Management: http://your-cluster-ip:15672
 - pgAdmin: http://your-cluster-ip:5050
 
+## Using graderctl
+
+The `graderctl` command-line tool provides various commands for managing tasks, running checks, and controlling the grader service. Here are the main command groups and their functionality:
+
+### Task Management
+
+1. Submit a new task:
+```bash
+graderctl task submit \
+  --check-type clickhouse \  # Type of check to perform
+  --user-id student123 \     # Student ID
+  --name "Lab 1 Check" \     # Optional task name
+  --tag "lab1" \            # Optional tag for grouping
+  --args '{"key": "value"}' \ # Checker arguments as JSON
+  --wait 60                  # Wait for completion (timeout in seconds)
+```
+
+You can also provide arguments from a file:
+```bash
+graderctl task submit -t clickhouse -u student123 --args-file args.json
+```
+
+2. List tasks with filtering:
+```bash
+graderctl task list \
+  --user-id student123 \  # Filter by user
+  --tag lab1 \           # Filter by tag
+  --status COMPLETED     # Filter by status
+```
+
+3. Get task details:
+```bash
+graderctl task get \
+  --task-id <task-id> \
+  --json-file task.json \     # Save task info to JSON
+  --report-file report.md     # Save report to Markdown
+```
+
+4. Cancel a running task:
+```bash
+graderctl task cancel --task-id <task-id>
+```
+
+5. Get task report:
+```bash
+graderctl task report \
+  --task-id <task-id> \
+  --output-file report.md
+```
+
+### Checker Commands
+
+1. Run ClickHouse checker directly:
+```bash
+graderctl checker clickhouse \
+  --host localhost \         # ClickHouse host
+  --user admin \            # Admin username
+  --student student123 \    # Student to check
+  --cluster-name main \     # Cluster name
+  --output report.md        # Output report path
+```
+
+2. Run a custom checker:
+```bash
+graderctl checker run \
+  --checker grader.checking.ch_checker.ClickHouseChecker \
+  --arguments args.json \
+  --output report.md
+```
+
+### API Service Control
+
+Start the grader API service:
+```bash
+graderctl api start \
+  --host 0.0.0.0 \    # Host to bind to
+  --port 8080 \       # Port to listen on
+  --reload            # Enable auto-reload
+```
+
+### Kubernetes Operations
+
+1. Show installation instructions:
+```bash
+graderctl k8s info
+```
+
+2. Generate installation script:
+```bash
+graderctl k8s install-script --output install.sh
+```
+
+### Environment Variables
+
+- `GRADER_API_URL`: API endpoint URL (default: http://localhost:8080)
+
+### Global Options
+
+- `--verbose`: Enable verbose logging for debugging
+
 ## Contributing
 
 Please refer to our contributing guidelines for information on how to propose changes and contribute to the project.
