@@ -54,10 +54,44 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 pytest = "^8.3.5"
 pytest-asyncio = "^0.26.0"
 
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.11.4"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.poetry.requires-plugins]
-poetry-plugin-export = ">=1.8"
+[tool.ruff]
+line-length = 120
+indent-width = 4
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
 

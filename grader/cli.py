@@ -1,15 +1,11 @@
 import logging
 import sys
 import click
-import yaml
-import requests
 import asyncio
-from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional
 import os
 import json
 import uuid
-from datetime import datetime
 
 from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
 from grader.schemes import TaskSubmitRequest
