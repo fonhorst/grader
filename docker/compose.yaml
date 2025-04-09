@@ -68,7 +68,7 @@ services:
         condition: service_healthy
     environment:
       - GRADER_DB_CONN=postgresql+asyncpg://postgres:postgres@postgres:5432/grader
-    
+      
 configs:
   rabbitmq_consumer_settings:
     file: ./rabbitmq/consumer-settings.conf

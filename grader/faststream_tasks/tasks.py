@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 broker_queue_name = os.environ.get("GRADER_FASTSTREAM_BROKER_QUEUE", "test-queue")
 broker_url = os.environ.get("GRADER_FASTSTREAM_BROKER", "amqp://admin:admin@localhost:5672/")
-broker = RabbitBroker(broker_url) 
+max_concurrency = int(os.environ.get("GRADER_FASTSTREAM_MAX_CONCURRENCY", "1"))
+
+broker = RabbitBroker(broker_url, max_consumers=max_concurrency) 
 app = FastStream(broker)
 
 UNEXPECTED_ERROR_MESSAGE = "Unexpected error happened during the check. Contact the administrator."

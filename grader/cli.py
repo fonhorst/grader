@@ -410,7 +410,7 @@ def run(checker: str, arguments: str, output: str):
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
 @click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')
 @click.option('--reload', '-r', is_flag=True, help='Enable auto-reload on code changes')
-def start(host: str, port: int, reload: bool):
+def start_api(host: str, port: int, reload: bool):
     """Start the REST API server."""
     logger.info(f"Starting API server on {host}:{port}")
     
@@ -433,6 +433,31 @@ def start(host: str, port: int, reload: bool):
     except Exception as e:
         logger.error(f"Error starting API server: {str(e)}", exc_info=True)
         click.echo(f"Failed to start API server: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@api.command()
+@click.option('--create-tables', '-c', is_flag=True, default=False, help='Create database tables before starting')
+def start_faststream(create_tables: bool):
+    """Start the FastStream worker for processing tasks."""
+    logger.info("Starting FastStream worker")  
+    
+    # Import and start FastStream app
+    try:
+        from grader.faststream_tasks.tasks import app
+        from grader.db.tasks import create_tables
+        import asyncio
+
+        if create_tables:
+            logger.info("Creating database tables...")
+            asyncio.run(create_tables())
+            logger.info("Database tables created successfully")
+        
+        logger.info("Starting FastStream app")
+        app.run()
+    except Exception as e:
+        logger.error(f"Error starting FastStream app: {str(e)}", exc_info=True)
+        click.echo(f"Failed to start FastStream app: {str(e)}", err=True)
         sys.exit(1)
 
 
