@@ -42,7 +42,6 @@ def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def submit_task(
     request: TaskSubmitRequest = Body(...),
-    user_id: str = Body(...),
     checker_service: CheckerService = Depends(get_checker_service)
 ) -> TaskResponse:
     """
@@ -50,7 +49,7 @@ async def submit_task(
     """
     try:
         task_info = await checker_service.submit(
-            user_id=user_id,
+            user_id=request.user_id,
             check_type=request.check_type,
             args=request.args,
             name=request.name,
@@ -59,7 +58,7 @@ async def submit_task(
         return convert_task_info_to_response(task_info)
     except Exception as e:
         logger.error(
-            f"Failed to submit task. User ID: {user_id}, Check Type: {request.check_type}, "
+            f"Failed to submit task. User ID: {request.user_id}, Check Type: {request.check_type}, "
             f"Name: {request.name}, Tag: {request.tag}",
             exc_info=True
         )

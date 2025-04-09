@@ -80,6 +80,7 @@ class GraderAPIClient:
                         raises GraderApiTimeoutException.
             poll_interval: The interval to poll for task completion in seconds.It has no effect if wait_timeout is None.
         """
+        # The API now expects user_id as part of the request
         data = await self._make_request('POST', '/tasks/', json=request.model_dump())
         response = TaskResponse(**data)
         

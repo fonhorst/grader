@@ -95,13 +95,11 @@ async def test_submit_task(mock_task_info):
     response = test_client.post(
         "/tasks/",
         json={
-            "request": {
-                "check_type": CheckType.CLICKHOUSE.value,
-                "args": {"host": "localhost"},
-                "name": "Test Task",
-                "tag": "test_tag"
-            },
-            "user_id": "test_user"
+            "check_type": CheckType.CLICKHOUSE.value,
+            "args": {"host": "localhost"},
+            "user_id": "test_user",
+            "name": "Test Task",
+            "tag": "test_tag"
         }
     )
     
