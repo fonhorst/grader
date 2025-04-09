@@ -42,8 +42,9 @@ class TaskInfo(BaseModel):
 
 
 class CheckerService:
-    def __init__(self, broker: Optional[RabbitBroker] = None):
-        self.broker = broker or broker
+    def __init__(self, queue: str, broker: RabbitBroker):
+        self.broker = broker
+        self.queue = queue
 
     async def submit(
         self,
@@ -85,7 +86,7 @@ class CheckerService:
         )
         
         # Send task to queue
-        await self.broker.publish(checking_task, "test-queue")
+        await self.broker.publish(checking_task, self.queue)
 
         logger.info(f"Task {task.id} sent to queue")
         

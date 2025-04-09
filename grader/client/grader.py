@@ -88,7 +88,7 @@ class GraderAPIClient:
             start_time = time.time()
             while True:
                 task = await self.get_task(response.id)
-                if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
+                if task.status in [TaskStatus.FINISHED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
                     return task
                 
                 if wait_timeout > 0 and (time.time() - start_time) > wait_timeout:

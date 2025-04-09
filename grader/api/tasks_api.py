@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-def get_checker_service() -> CheckerService:
-    return CheckerService()
+async def get_checker_service() -> CheckerService:
+    from grader.faststream_tasks.tasks import broker, broker_queue_name
+    await broker.connect()
+    return CheckerService(queue=broker_queue_name, broker=broker)
 
 
 def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:

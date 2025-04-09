@@ -23,6 +23,12 @@ def configure_sqlalchemy_logging():
     return None
 
 
+@pytest.fixture(scope="session")
+def broker_queue_name():
+    """Return the broker queue name used in FastStream tasks."""
+    return "test-queue"
+
+
 # TODO: add cleaning of rabbitmq test-queue
 
 
@@ -40,7 +46,7 @@ async def clean_tasks_table():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def clean_rabbitmq_queue():
+async def clean_rabbitmq_queue(broker_queue_name):
     """
     Clean RabbitMQ queue by deleting and recreating it before and after a test function.
     

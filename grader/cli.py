@@ -465,7 +465,8 @@ def start_faststream(create_tables: bool):
         logger.info("Starting FastStream app")
         _run_imported_app(
             app,
-            log_level=get_log_level_value(),
+            extra_options=dict(),
+            log_level=get_log_level_value()
         )
     except Exception as e:
         logger.error(f"Error starting FastStream app: {str(e)}", exc_info=True)

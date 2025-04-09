@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.asyncio
-async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test complete task lifecycle with successful execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
         user_id = "test_user"
@@ -76,13 +76,13 @@ async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, mon
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test complete task lifecycle with failed execution."""
 
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
         user_id = "test_user"
@@ -131,12 +131,12 @@ async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, mon
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test task cancellation during execution."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
         user_id = "test_user"
@@ -183,12 +183,12 @@ async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, monkey
 
 
 @pytest.mark.asyncio
-async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test listing tasks with various filters."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Mock the checking function to return quickly
         def mock_checking(*args, **kwargs):
@@ -264,12 +264,12 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test task deletion."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Mock the checking function to return quickly
         def mock_checking(*args, **kwargs):
@@ -308,12 +308,12 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, monkeypatch):
+async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
     """Test deleting all tasks."""
     logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     async with TestRabbitBroker(broker, with_real=True) as br:
-        service = CheckerService(broker=br)
+        service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Mock the checking function to return quickly
         def mock_checking(*args, **kwargs):
