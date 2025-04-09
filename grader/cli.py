@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 
+from grader.checking.base import CheckerReport
 from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
 from grader.schemes import TaskSubmitRequest
 
@@ -108,13 +109,20 @@ def k8s():
 @click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
 @click.option('--wait', '-w', type=int, help='Wait for task completion (timeout in seconds, 0 for indefinite wait)')
 @click.option('--poll-interval', '-p', type=float, help='Poll interval for task completion in seconds. Default is 1.0 second.', default=1.0)
-def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float):
+@click.option('--report-file', '-r', type=click.Path(dir_okay=False), help='Save task report to this Markdown file if task completes successfully. Only used when --wait is specified.')
+def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float, report_file: str):
     """Submit a new checking task and optionally wait for completion."""
     logger.info(f"Running task for user {user_id} with check type {check_type}")
     
     # Check mutual exclusivity of args and args_file
     if args and args_file:
         error_msg = "Error: --args and --args-file are mutually exclusive. Please provide only one of them."
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+    
+    # Check that report-file is only used with wait
+    if report_file and not wait:
+        error_msg = "Error: --report-file can only be used when --wait is specified."
         click.echo(error_msg, err=True)
         sys.exit(1)
     
@@ -141,6 +149,16 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
                 response = await client.submit_task(request, wait_timeout=wait, poll_interval=poll_interval)
                 logger.info(f"Task {'completed' if wait else 'submitted'} with ID: {response.id}")
                 click.echo(format_task_info(response.model_dump()))
+                
+                # Save report if requested and available
+                if report_file and wait and response.report:
+                    logger.debug(f"Saving report to file: {report_file}")
+                    report = CheckerReport.model_validate_json(response.report)
+                    with open(report_file, 'w') as f:
+                        f.write(report.to_markdown())
+                    click.echo(f"Report saved to {report_file}")
+                elif report_file and wait:
+                    click.echo("\nNo report available for this task", err=True)
                 
         except json.JSONDecodeError as e:
             error_msg = f"Error: Invalid JSON format - {str(e)}"
@@ -217,8 +235,9 @@ def get(task_id: str, json_file: str, report_file: str):
                 # Save report if requested and available
                 if report_file and task_data.report:
                     logger.debug(f"Saving report to file: {report_file}")
+                    report = CheckerReport.model_validate_json(task_data.report)
                     with open(report_file, 'w') as f:
-                        f.write(task_data.report)
+                        f.write(report.to_markdown())
                     click.echo(f"Report saved to {report_file}")
                 elif report_file:
                     click.echo("\nNo report available for this task", err=True)
@@ -310,10 +329,12 @@ def report(task_id: str, output_file: str):
                     click.echo("\nNo report available for this task", err=True)
                     return
                 
+                report = CheckerReport.model_validate_json(report_data.report)
+                
                 # Save report in markdown format
                 logger.debug(f"Saving report to file: {output_file}")
                 with open(output_file, 'w') as f:
-                    f.write(report_data.report)
+                    f.write(report.to_markdown())
                 click.echo(f"Report saved to {output_file}")
                 
         except GraderApiException as e:
