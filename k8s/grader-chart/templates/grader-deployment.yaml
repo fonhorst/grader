@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grader-chart.fullname" . }}
+  labels:
+    {{- include "grader-chart.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.grader.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "grader-chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "grader-chart.selectorLabels" . | nindent 8 }}
+      {{- with .Values.grader.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.grader.image.repository }}:{{ .Values.grader.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.grader.image.pullPolicy }}
+          command: ["graderctl"]
+          args: ["api", "start", "--host", "0.0.0.0", "--port", "{{ .Values.grader.service.port }}"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.grader.service.port }}
+              protocol: TCP
+          env:
+            - name: GRADER_VERSION
+              value: {{ .Values.grader.config.version | quote }}
+            - name: RABBITMQ_HOST
+              value: {{ .Values.grader.config.rabbitmq.host | quote }}
+            - name: RABBITMQ_PORT
+              value: {{ .Values.grader.config.rabbitmq.port | quote }}
+            - name: RABBITMQ_USER
+              value: {{ .Values.grader.config.rabbitmq.user | quote }}
+            - name: RABBITMQ_PASSWORD
+              value: {{ .Values.grader.config.rabbitmq.password | quote }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.grader.config.postgres.host | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.grader.config.postgres.port | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.grader.config.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.grader.config.postgres.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.grader.config.postgres.database | quote }}
+          livenessProbe:
+            {{- toYaml .Values.grader.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.grader.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.grader.resources | nindent 12 }}
+      {{- with .Values.grader.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grader.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grader.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

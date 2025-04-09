@@ -1,194 +1,647 @@
+import logging
+import sys
 import click
-import yaml
-import requests
-from pydantic import BaseModel
-from typing import Optional, List, Dict
+import asyncio
+from typing import Optional
 import os
 import json
+import uuid
+
+from grader.checking.base import CheckerReport
+from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
+from grader.schemes import TaskSubmitRequest
+
+logger = logging.getLogger(__name__)
 
 
-# Config class using pydantic for validation
-class Config(BaseModel):
-    api_base_url: str
-    user_id: str
-    project: str
+def get_api_url() -> str:
+    """Get the API URL from environment variable or use default."""
+    api_url = os.getenv('GRADER_API_URL', 'http://localhost:8080')
+    logger.info(f"Using API URL: {api_url}")
+    return api_url
 
 
-# Load configuration from a `.grader` file
-def load_config():
-    if os.path.exists('.grader'):
-        with open('.grader') as f:
-            return Config(**yaml.safe_load(f))
-    else:
-        raise FileNotFoundError("Configuration file '.grader' not found.")
+def get_log_level() -> str:
+    return "debug" if logger.getEffectiveLevel() <= logging.DEBUG else "info"
 
 
-# Context object to store config
-class Context:
-    def __init__(self):
-        self.config = load_config()
+def get_log_level_value() -> int:
+    return logging.DEBUG if logger.getEffectiveLevel() <= logging.DEBUG else logging.INFO
 
 
-pass_context = click.make_pass_decorator(Context, ensure=True)
+def format_task_info(task_data: dict) -> str:
+    """Format task information in a human-readable way with colors."""
+    status = task_data.get('status', 'UNKNOWN')
+    status_color = {
+        'PENDING': 'yellow',
+        'RUNNING': 'blue',
+        'COMPLETED': 'green',
+        'FAILED': 'red',
+        'CANCELLED': 'red',
+        'ERROR': 'red'
+    }.get(status, 'white')
+
+    formatted = [
+        click.style(f"Task ID: {task_data.get('id')}", bold=True),
+        click.style(f"Status: {status}", fg=status_color, bold=True),
+        f"Name: {task_data.get('name', 'N/A')}",
+        f"User ID: {task_data.get('user_id', 'N/A')}",
+        f"Tag: {task_data.get('tag', 'N/A')}",
+        f"Submit Time: {task_data.get('submit_time', 'N/A')}",
+        f"End Time: {task_data.get('end_time', 'N/A')}"
+    ]
+    
+    return "\n".join(formatted)
 
 
 @click.group()
-def cli():
+@click.option('--verbose', is_flag=True, help='Enable verbose logging')
+def cli(verbose: bool):
+    """Grader CLI tool for managing and running checks."""
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)", 
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    if not verbose:
+        logging.getLogger("requests").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+    else:
+        # In verbose mode, set all loggers to DEBUG
+        logging.getLogger("requests").setLevel(logging.DEBUG)
+        logging.getLogger("urllib3").setLevel(logging.DEBUG)
+        logging.getLogger("httpx").setLevel(logging.DEBUG)
+
+    logger.info("Starting Grader CLI")
+    ctx = click.get_current_context()
+    if ctx.parent is None:
+        logger.info(f"CLI invoked with args: {sys.argv}")
+
+
+@cli.group()
+def task():
     pass
 
 
-# Main group command 'tasks' with alias 'task'
-@cli.group(invoke_without_command=True, cls=click.Group, )
-@pass_context
-def task(ctx):
-    """Task management utility."""
-    click.echo("Task management utility loaded.")
+@cli.group()
+def checker():
+    pass
 
 
-# List tasks
+@cli.group()
+def serve():
+    pass
+
+
+@cli.group()
+def k8s():
+    pass
+
+
 @task.command()
-@click.option('--all', 'list_all', is_flag=True, help="List all tasks.")
-@click.option('--running', is_flag=True, help="List running tasks.")
-@click.option('--failed', is_flag=True, help="List failed tasks.")
-@click.option('--project', type=str, help="List tasks for a specific project.")
-@click.option('--student', type=str, help="List tasks for a specific student.")
-@pass_context
-def list(ctx, list_all, running, failed, project, student):
-    """List existing tasks."""
-    config = ctx.config
-    url = f"{config.api_base_url}/tasks"
-    params = {}
+@click.option('--check-type', '-t', required=True, type=str, help='Type of check to perform (e.g. "clickhouse")')
+@click.option('--user-id', '-u', required=True, type=str, help='User ID for the task')
+@click.option('--name', '-n', type=str, help='Optional name for the task')
+@click.option('--tag', type=str, help='Optional tag for grouping tasks')
+@click.option('--args', type=str, help='JSON string with arguments for the checker. Mutually exclusive with --args-file')
+@click.option('--args-file', type=click.Path(exists=True, dir_okay=False), help='Path to JSON file containing arguments for the checker. Mutually exclusive with --args')
+@click.option('--wait', '-w', type=int, help='Wait for task completion (timeout in seconds, 0 for indefinite wait)')
+@click.option('--poll-interval', '-p', type=float, help='Poll interval for task completion in seconds. Default is 1.0 second.', default=1.0)
+@click.option('--report-file', '-r', type=click.Path(dir_okay=False), help='Save task report to this Markdown file if task completes successfully. Only used when --wait is specified.')
+def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_file: str, wait: Optional[int], poll_interval: float, report_file: str):
+    """Submit a new checking task and optionally wait for completion."""
+    logger.info(f"Running task for user {user_id} with check type {check_type}")
+    
+    # Check mutual exclusivity of args and args_file
+    if args and args_file:
+        error_msg = "Error: --args and --args-file are mutually exclusive. Please provide only one of them."
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+    
+    # Check that report-file is only used with wait
+    if report_file and not wait:
+        error_msg = "Error: --report-file can only be used when --wait is specified."
+        click.echo(error_msg, err=True)
+        sys.exit(1)
+    
+    async def run_task():
+        try:
+            checker_args = {}
+            if args:
+                logger.debug("Parsing args from command line JSON string")
+                checker_args = json.loads(args)
+            elif args_file:
+                logger.debug(f"Loading args from file: {args_file}")
+                with open(args_file) as f:
+                    checker_args = json.load(f)
+            
+            request = TaskSubmitRequest(
+                check_type=check_type,
+                user_id=user_id,
+                name=name,
+                tag=tag,
+                args=checker_args
+            )
+            
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                response = await client.submit_task(request, wait_timeout=wait, poll_interval=poll_interval)
+                logger.info(f"Task {'completed' if wait else 'submitted'} with ID: {response.id}")
+                click.echo(format_task_info(response.model_dump()))
+                
+                # Save report if requested and available
+                if report_file and wait and response.report:
+                    logger.debug(f"Saving report to file: {report_file}")
+                    report = CheckerReport.model_validate_json(response.report)
+                    with open(report_file, 'w') as f:
+                        f.write(report.to_markdown())
+                    click.echo(f"Report saved to {report_file}")
+                elif report_file and wait:
+                    click.echo("\nNo report available for this task", err=True)
+                
+        except json.JSONDecodeError as e:
+            error_msg = f"Error: Invalid JSON format - {str(e)}"
+            logger.error(error_msg)
+            click.echo(error_msg, err=True)
+            sys.exit(1)
+        except GraderApiTimeoutException as e:
+            logger.error(f"Timeout waiting for task completion: {e.message}", exc_info=True)
+            click.echo(f"Task did not complete within timeout: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to run task: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error running task: {str(e)}", exc_info=True)
+            click.echo(f"Failed to run task: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(run_task())
 
-    if not (list_all or running or failed or project or student):
-        params['requester'] = config.user_id
-        params['status'] = 'running'
 
-    if list_all:
-        params['requester'] = config.user_id
-    if running:
-        params['status'] = 'running'
-    if failed:
-        params['status'] = 'failed'
-    if project:
-        params['project'] = project
-    if student:
-        params['student'] = student
-
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-        tasks = response.json()
-        click.echo(f"{'UID':<36} {'Status':<10} {'Submit Time'}")
-        for task in tasks:
-            click.echo(f"{task['uid']:<36} {task['status']:<10} {task['submit_time']}")
-    else:
-        click.echo(f"Error: {response.status_code}")
-
-
-# Create a task
 @task.command()
-@click.option('--name', required=True, help="Name of the task.")
-@click.option('--param', '-p', multiple=True, help="Task parameters in the form <key>=<value>.")
-@click.option('-f', '--file', 'file_path', type=click.Path(), help="YAML file with task details.")
-@pass_context
-def submit(ctx, name, param, file_path):
-    """Create a new task."""
-    config = ctx.config
+@click.option('--user-id', '-u', type=str, help='Filter tasks by user ID')
+@click.option('--tag', '-t', type=str, help='Filter tasks by tag')
+@click.option('--status', '-s', type=str, help='Filter tasks by status')
+def list(user_id: str, tag: str, status: str):
+    """List tasks with optional filtering."""
+    logger.info("Listing tasks with filters")
+    
+    async def list_tasks():
+        try:
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                response = await client.list_tasks(user_id=user_id, tag=tag, status=status)
+                logger.info(f"Found {len(response.tasks)} tasks")
+                for task in response.tasks:
+                    click.echo(format_task_info(task.model_dump()))
+                    click.echo("---")
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to list tasks: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error listing tasks: {str(e)}", exc_info=True)
+            click.echo(f"Failed to list tasks: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(list_tasks())
 
-    if file_path:
-        with open(file_path, 'r') as file:
-            task_data = yaml.safe_load(file)
-    else:
-        task_data = {}
-        task_data['name'] = name
-        task_data['parameters'] = dict([p.split('=') for p in param])
 
-    task_data['requester'] = config.user_id
-    task_data['project'] = config.project
-
-    url = f"{config.api_base_url}/task/start"
-    response = requests.post(url, json=task_data)
-
-    if response.status_code == 200:
-        click.echo(f"Task {name} submitted successfully!")
-    else:
-        click.echo(f"Error: {response.status_code}")
-
-
-# Cancel a task
 @task.command()
-@click.argument('task_ids', nargs=-1)
-@pass_context
-def cancel(ctx, task_ids):
-    """Cancel one or more tasks by their IDs."""
-    config = ctx.config
-    for task_id in task_ids:
-        url = f"{config.api_base_url}/task/{task_id}/cancel"
-        response = requests.get(url)
-        if response.status_code == 200:
-            click.echo(f"Task {task_id} cancelled.")
-        else:
-            click.echo(f"Error cancelling task {task_id}: {response.status_code}")
+@click.option('--task-id', '-i', required=True, type=str, help='ID of the task to retrieve')
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save task info to this JSON file')
+@click.option('--report-file', type=click.Path(dir_okay=False), help='Save task report to this Markdown file if available')
+def get(task_id: str, json_file: str, report_file: str):
+    """Get information about a specific task."""
+    logger.info(f"Getting task info for ID: {task_id}")
+    
+    async def get_task():
+        try:
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                task_data = await client.get_task(uuid.UUID(task_id))
+                
+                logger.debug(f"Retrieved task data: {task_data}")
+                click.echo(format_task_info(task_data.model_dump()))
+                
+                # Save JSON if requested
+                if json_file:
+                    logger.debug(f"Saving task info to JSON file: {json_file}")
+                    with open(json_file, 'w') as f:
+                        json.dump(task_data.model_dump(), f, indent=2)
+                    click.echo(f"\nTask info saved to {json_file}")
+                
+                # Save report if requested and available
+                if report_file and task_data.report:
+                    logger.debug(f"Saving report to file: {report_file}")
+                    report = CheckerReport.model_validate_json(task_data.report)
+                    with open(report_file, 'w') as f:
+                        f.write(report.to_markdown())
+                    click.echo(f"Report saved to {report_file}")
+                elif report_file:
+                    click.echo("\nNo report available for this task", err=True)
+                    
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to get task: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error getting task: {str(e)}", exc_info=True)
+            click.echo(f"Failed to get task: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(get_task())
 
 
-# Get task information
 @task.command()
-@click.argument('task_id')
-@click.option('--output', type=click.Choice(['console', 'yaml']), default='console', help="Output format.")
-@pass_context
-def get(ctx, task_id, output):
-    """Get information about a task."""
-    config = ctx.config
-    url = f"{config.api_base_url}/task/{task_id}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        task_info = response.json()
-        if output == 'yaml':
-            with open(f"{task_id}.yaml", 'w') as f:
-                yaml.dump(task_info, f)
-            click.echo(f"Task info saved to {task_id}.yaml")
-        else:
-            click.echo(json.dumps(task_info, indent=2))
-    else:
-        click.echo(f"Error: {response.status_code}")
+@click.option('--task-id', '-i', required=True, type=str, help='ID of the task to cancel')
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
+def cancel(task_id: str, json_file: str):
+    """Cancel a running task."""
+    logger.info(f"Canceling task with ID: {task_id}")
+    
+    async def cancel_task():
+        try:
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                task_data = await client.cancel_task(uuid.UUID(task_id))
+                
+                logger.debug(f"Task cancel response: {task_data}")
+                click.echo(format_task_info(task_data.model_dump()))
+                
+                # Save JSON if requested
+                if json_file:
+                    logger.debug(f"Saving response to JSON file: {json_file}")
+                    with open(json_file, 'w') as f:
+                        json.dump(task_data.model_dump(), f, indent=2)
+                    click.echo(f"\nResponse saved to {json_file}")
+                    
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to cancel task: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error canceling task: {str(e)}", exc_info=True)
+            click.echo(f"Failed to cancel the task: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(cancel_task())
 
 
-# Get task logs
 @task.command()
-@click.argument('task_id')
-@pass_context
-def logs(ctx, task_id):
-    """Get logs of a task."""
-    config = ctx.config
-    url = f"{config.api_base_url}/task/{task_id}/log"
-    response = requests.get(url)
-    if response.status_code == 200:
-        logs = response.json().get('log', '')
-        click.echo(logs)
-    else:
-        click.echo(f"Error: {response.status_code}")
+@click.option('--task-id', '-i', required=True, type=str, help='ID of the task to delete')
+@click.option('--json-file', type=click.Path(dir_okay=False), help='Save response to this JSON file')
+def delete(task_id: str, json_file: str):
+    """Delete a task."""
+    logger.info(f"Deleting task with ID: {task_id}")
+    
+    async def delete_task():
+        try:
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                await client.delete_task(uuid.UUID(task_id))
+                click.echo("Task deleted successfully")
+                    
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to delete task: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error deleting task: {str(e)}", exc_info=True)
+            click.echo(f"Failed to delete the task: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(delete_task())
 
 
-# Get task results
 @task.command()
-@click.argument('task_id')
-@click.option('--output-file', type=click.Path(), help="Path to store the task result.")
-@pass_context
-def results(ctx, task_id, output_file):
-    """Retrieve task results and save to file."""
-    config = ctx.config
-    url = f"{config.api_base_url}/task/{task_id}/result"
-    response = requests.get(url)
-    if response.status_code == 200:
-        result = response.json().get('results', {})
-        if output_file:
-            with open(output_file, 'w') as f:
-                json.dump(result, f)
-            click.echo(f"Results saved to {output_file}")
-        else:
-            click.echo(json.dumps(result, indent=2))
-    else:
-        click.echo(f"Error: {response.status_code}")
+@click.option('--task-id', '-i', required=True, type=str, help='ID of the task to get report for')
+@click.option('--output-file', '-o', type=click.Path(dir_okay=False), required=True, help='Save report to this file (Markdown format)')
+def report(task_id: str, output_file: str):
+    """Get the report from a finished task."""
+    logger.info(f"Getting report for task ID: {task_id}")
+    
+    async def get_report():
+        try:
+            async with GraderAPIClient(base_url=get_api_url()) as client:
+                report_data = await client.get_task_report(uuid.UUID(task_id))
+                
+                if not report_data.report:
+                    click.echo("\nNo report available for this task", err=True)
+                    return
+                
+                report = CheckerReport.model_validate_json(report_data.report)
+                
+                # Save report in markdown format
+                logger.debug(f"Saving report to file: {output_file}")
+                with open(output_file, 'w') as f:
+                    f.write(report.to_markdown())
+                click.echo(f"Report saved to {output_file}")
+                
+        except GraderApiException as e:
+            logger.error(f"API Error: {e.message}", exc_info=True)
+            click.echo(f"Failed to get report: {e.detail or e.message}", err=True)
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error getting report: {str(e)}", exc_info=True)
+            click.echo(f"Failed to get the report: {str(e)}", err=True)
+            sys.exit(1)
+    
+    asyncio.run(get_report())
+
+
+@checker.command()
+@click.option('--host', '-h', default="localhost", show_default=True, help='ClickHouse host address')
+@click.option('--user', '-u', default="admin", show_default=True, help='Admin username')
+@click.option('--student', '-s', required=True, help='Student username to check')
+@click.option('--cluster-name', '-c', default="main_cluster", show_default=True, help='ClickHouse cluster name')
+@click.option('--output', '-o', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
+@click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
+def clickhouse(host: str, user: str, student: str, cluster_name: str, output: str, log_file: str):
+    """Run ClickHouse checker directly.
+    
+    This command runs the ClickHouse checker without using the task queue service.
+    It will prompt for the admin password securely during execution.
+    """
+    from grader.checking.checking import run_checking, CheckType
+    import getpass
+    
+    try:
+        # Get password securely
+        password = getpass.getpass(f"Enter ClickHouse password for {user}: ")
+        
+        report = run_checking(
+            check_type=CheckType.CLICKHOUSE,
+            host=host,
+            user=user,
+            password=password,
+            student_username=student,
+            cluster_name=cluster_name
+        )
+        
+        # Save report as Markdown
+        markdown_report = report.to_markdown()
+        with open(output, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {output}")
+        
+        if not report.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        exit(1)
+
+
+@checker.command()
+@click.option('--checker', required=True, type=str, help='Fully qualified name of the checker class (e.g. grader.checking.ch_checker.ClickHouseChecker)')
+@click.option('--arguments', required=True, type=click.Path(exists=True, dir_okay=False), help='Path to JSON file with checker arguments')
+@click.option('--output', required=True, type=click.Path(dir_okay=False), help='Output path for the report in Markdown format')
+def run(checker: str, arguments: str, output: str):
+    """Run an arbitrary checker directly.
+    
+    This command allows running any checker by specifying its fully qualified class name
+    and providing arguments through a JSON file.
+    """
+    try:
+        # Import the checker class dynamically
+        module_path, class_name = checker.rsplit('.', 1)
+        import importlib
+        module = importlib.import_module(module_path)
+        checker_class = getattr(module, class_name)
+        
+        # Load arguments
+        with open(arguments) as f:
+            checker_args = json.load(f)
+        
+        # Initialize and run checker
+        checker_instance = checker_class(**checker_args)
+        report = checker_instance.run_checks()
+        
+        # Save report as Markdown
+        markdown_report = report.to_markdown()
+        with open(output, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {output}")
+        
+        if not report.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@serve.command()
+@click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
+@click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')
+@click.option('--reload', '-r', is_flag=True, help='Enable auto-reload on code changes')
+def start_api(host: str, port: int, reload: bool):
+    """Start the REST API server."""
+    logger.info(f"Starting API server on {host}:{port}")
+    
+    import uvicorn
+    from fastapi import FastAPI
+    from grader.api.tasks_api import router as tasks_router
+    
+    app = FastAPI()
+    app.include_router(tasks_router)
+    
+    logger.info("API server configured with Swagger UI at /docs")
+    try:
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            reload=reload,
+            log_level=get_log_level()
+        )
+    except Exception as e:
+        logger.error(f"Error starting API server: {str(e)}", exc_info=True)
+        click.echo(f"Failed to start API server: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@serve.command()
+@click.option('--create-tables', '-c', is_flag=True, default=False, help='Create database tables before starting')
+def start_faststream(create_tables: bool):
+    """Start the FastStream worker for processing tasks."""
+    logger.info("Starting FastStream worker")  
+    
+    # Import and start FastStream app
+    try:
+        from faststream.cli.main import _run_imported_app
+        from grader.faststream_tasks.tasks import app
+        from grader.db.tasks import create_tables
+        import asyncio
+
+        if create_tables:
+            logger.info("Creating database tables...")
+            asyncio.run(create_tables())
+            logger.info("Database tables created successfully")
+        
+        logger.info("Starting FastStream app")
+        # TODO: we don't currently support multiple workers in CLI
+        # Consider using FastStream CLI instead
+        _run_imported_app(
+            app,
+            extra_options=dict(),
+            log_level=get_log_level_value()
+        )
+    except Exception as e:
+        logger.error(f"Error starting FastStream app: {str(e)}", exc_info=True)
+        click.echo(f"Failed to start FastStream app: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@k8s.command()
+def info():
+    """Show instructions for installing components on Kubernetes."""
+    instructions = """
+Kubernetes Installation Instructions
+=================================
+
+Prerequisites:
+- Kubernetes cluster with Helm installed
+- Storage class 'ess-dn2' available in the cluster
+- Access to the required container registries
+
+Installation Steps:
+
+1. Install HDFS Chart
+-------------------
+cd k8s
+helm install hdfs ./hdfs-chart -f hdfs-values.yaml
+
+This will deploy:
+- HDFS NameNode with 30Gi storage
+- HDFS DataNode with 100Gi storage
+- Services for NameNode (NodePort) and DataNode
+- Default replication factor: 1
+
+2. Install ClickHouse Chart
+------------------------
+cd k8s
+helm install clickhouse ./ch-chart -f ch-values.yaml
+
+This will deploy:
+- ClickHouse cluster with 3 replicas
+- Using storage class 'ess-dn2'
+
+3. Install Workspace
+-----------------
+cd k8s
+helm install workspace ./Workspace
+
+Monitor the Installation:
+-----------------------
+kubectl get pods    # Check pod status
+kubectl get pvc    # Check persistent volume claims
+kubectl get svc    # Check services
+
+Notes:
+- Make sure all pods are in Running state before proceeding
+- Check logs if any pod fails to start: kubectl logs <pod-name>
+- For troubleshooting: kubectl describe pod <pod-name>
+"""
+    click.echo(instructions)
+
+
+@k8s.command()
+@click.option('--output', '-o', type=click.Path(dir_okay=False), required=True, help='Path to save the installation script')
+def install_script(output: str):
+    """Generate a bash script for installing all components on Kubernetes."""
+    script_content = """#!/bin/bash
+set -e
+
+echo "Starting Grader components installation..."
+
+# Function to check if a command exists
+check_command() {
+    if ! command -v $1 &> /dev/null; then
+        echo "Error: $1 is required but not installed."
+        exit 1
+    fi
+}
+
+# Check prerequisites
+echo "Checking prerequisites..."
+check_command kubectl
+check_command helm
+
+# Check if we can connect to the cluster
+kubectl cluster-info || {
+    echo "Error: Cannot connect to Kubernetes cluster"
+    exit 1
+}
+
+# Check if storage class exists
+kubectl get storageclass ess-dn2 || {
+    echo "Error: Storage class 'ess-dn2' not found"
+    exit 1
+}
+
+# Function to wait for pods to be ready
+wait_for_pods() {
+    namespace=$1
+    echo "Waiting for pods in namespace $namespace to be ready..."
+    kubectl wait --for=condition=ready pod --all -n $namespace --timeout=300s
+}
+
+# Create namespace if it doesn't exist
+kubectl create namespace grader 2>/dev/null || true
+
+echo "Installing HDFS..."
+cd k8s
+helm install hdfs ./hdfs-chart -f hdfs-values.yaml -n grader || {
+    echo "Error installing HDFS chart"
+    exit 1
+}
+
+echo "Installing ClickHouse..."
+helm install clickhouse ./ch-chart -f ch-values.yaml -n grader || {
+    echo "Error installing ClickHouse chart"
+    exit 1
+}
+
+echo "Installing Workspace..."
+helm install workspace ./Workspace -n grader || {
+    echo "Error installing Workspace chart"
+    exit 1
+}
+
+echo "Waiting for all pods to be ready..."
+wait_for_pods grader
+
+echo "Installation complete! Checking component status..."
+kubectl get pods -n grader
+kubectl get pvc -n grader
+kubectl get svc -n grader
+
+echo "
+Installation successful! Here are some useful commands:
+
+Check pod status:    kubectl get pods -n grader
+Check services:      kubectl get svc -n grader
+Check PVCs:          kubectl get pvc -n grader
+View pod logs:       kubectl logs -n grader <pod-name>
+Pod details:         kubectl describe pod -n grader <pod-name>
+"
+"""
+    
+    try:
+        with open(output, 'w') as f:
+            f.write(script_content)
+        os.chmod(output, 0o755)  # Make the script executable
+        click.echo(f"Installation script saved to {output}")
+        click.echo("You can now run the script to install all components.")
+    except Exception as e:
+        click.echo(f"Error creating installation script: {str(e)}", err=True)
 
 
 if __name__ == "__main__":
     cli()
+

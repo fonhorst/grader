@@ -1,0 +1,8 @@
+{
+    "host": "localhost",
+    "user": "admin", 
+    "password": "admin", 
+    "student_username": "tutor",
+    "cluster_name": "main_cluster"
+}
+
