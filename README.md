@@ -1,4 +1,4 @@
-# grader
+# Grader
 
 A distributed grading system with support for various services and task processing.
 
@@ -69,13 +69,20 @@ This starts all services including:
 - PostgreSQL
 - RabbitMQ
 - pgAdmin (available at localhost:5050)
-- Grader service (available at localhost:8080)
+- Grader API service (available at localhost:8080)
+- Grader FastStream worker for task processing
 
 ### Environment Variables
 The services are pre-configured with default development credentials:
 - PostgreSQL: user=postgres, password=postgres, db=grader
 - RabbitMQ: user=admin, password=admin
 - pgAdmin: email=admin@admin.com, password=admin
+
+Additionally, the Docker Compose sets the following environment variables for the grader services:
+- GRADER_DB_CONN=postgresql+asyncpg://postgres:postgres@postgres:5432/grader
+- GRADER_FASTSTREAM_BROKER=amqp://admin:admin@rabbitmq:5672/
+- GRADER_FASTSTREAM_BROKER_QUEUE=grader-queue
+- GRADER_FASTSTREAM_MAX_CONCURRENCY=1
 
 ## Running Tests
 
@@ -167,9 +174,15 @@ The services will be available at:
 - RabbitMQ Management: http://your-cluster-ip:15672
 - pgAdmin: http://your-cluster-ip:5050
 
-## Using graderctl
+## Using the CLI
 
-The `graderctl` command-line tool provides various commands for managing tasks, running checks, and controlling the grader service. Here are the main command groups and their functionality:
+The grader provides a comprehensive command-line interface for managing tasks, running checks, and controlling the grader service. Here are the main command groups and their functionality:
+
+### Global Options
+
+```bash
+graderctl --verbose  # Enable verbose logging for all commands
+```
 
 ### Task Management
 
@@ -210,7 +223,12 @@ graderctl task get \
 graderctl task cancel --task-id <task-id>
 ```
 
-5. Get task report:
+5. Delete a task:
+```bash
+graderctl task delete --task-id <task-id>
+```
+
+6. Get task report:
 ```bash
 graderctl task report \
   --task-id <task-id> \
@@ -225,7 +243,7 @@ graderctl checker clickhouse \
   --host localhost \         # ClickHouse host
   --user admin \            # Admin username
   --student student123 \    # Student to check
-  --cluster-name main \     # Cluster name
+  --cluster-name main_cluster \     # Cluster name
   --output report.md        # Output report path
 ```
 
@@ -237,14 +255,20 @@ graderctl checker run \
   --output report.md
 ```
 
-### API Service Control
+### Serve Commands
 
-Start the grader API service:
+1. Start the API server:
 ```bash
-graderctl api start \
+graderctl serve start-api \
   --host 0.0.0.0 \    # Host to bind to
   --port 8080 \       # Port to listen on
   --reload            # Enable auto-reload
+```
+
+2. Start the FastStream worker for task processing:
+```bash
+graderctl serve start-faststream \
+  --create-tables     # Create database tables before starting
 ```
 
 ### Kubernetes Operations
@@ -262,10 +286,6 @@ graderctl k8s install-script --output install.sh
 ### Environment Variables
 
 - `GRADER_API_URL`: API endpoint URL (default: http://localhost:8080)
-
-### Global Options
-
-- `--verbose`: Enable verbose logging for debugging
 
 ## Contributing
 
