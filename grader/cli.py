@@ -20,6 +20,14 @@ def get_api_url() -> str:
     return api_url
 
 
+def get_log_level() -> str:
+    return "debug" if logger.getEffectiveLevel() <= logging.DEBUG else "info"
+
+
+def get_log_level_value() -> int:
+    return logging.DEBUG if logger.getEffectiveLevel() <= logging.DEBUG else logging.INFO
+
+
 def format_task_info(task_data: dict) -> str:
     """Format task information in a human-readable way with colors."""
     status = task_data.get('status', 'UNKNOWN')
@@ -428,7 +436,7 @@ def start_api(host: str, port: int, reload: bool):
             host=host,
             port=port,
             reload=reload,
-            log_level="debug" if logger.getEffectiveLevel() <= logging.DEBUG else "info"
+            log_level=get_log_level()
         )
     except Exception as e:
         logger.error(f"Error starting API server: {str(e)}", exc_info=True)
@@ -444,6 +452,7 @@ def start_faststream(create_tables: bool):
     
     # Import and start FastStream app
     try:
+        from faststream.cli.main import _run_imported_app
         from grader.faststream_tasks.tasks import app
         from grader.db.tasks import create_tables
         import asyncio
@@ -454,7 +463,10 @@ def start_faststream(create_tables: bool):
             logger.info("Database tables created successfully")
         
         logger.info("Starting FastStream app")
-        app.run()
+        _run_imported_app(
+            app,
+            log_level=get_log_level_value(),
+        )
     except Exception as e:
         logger.error(f"Error starting FastStream app: {str(e)}", exc_info=True)
         click.echo(f"Failed to start FastStream app: {str(e)}", err=True)
