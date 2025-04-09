@@ -58,7 +58,7 @@ services:
       context: ..
       dockerfile: docker/app.dockerfile
       target: final
-    command: ["--verbose", "api", "start", "--host", "0.0.0.0", "--port", "8080"]
+    command: ["--verbose", "api", "start-api", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8080:8080"
     depends_on:
@@ -68,6 +68,28 @@ services:
         condition: service_healthy
     environment:
       - GRADER_DB_CONN=postgresql+asyncpg://postgres:postgres@postgres:5432/grader
+      - GRADER_FASTSTREAM_BROKER=amqp://admin:admin@rabbitmq:5672/
+      - GRADER_FASTSTREAM_BROKER_QUEUE=grader-queue
+      - GRADER_FASTSTREAM_MAX_CONCURRENCY=1
+
+  grader-faststream:
+    profiles:
+      - grader
+    build:
+      context: ..
+      dockerfile: docker/app.dockerfile
+      target: final
+    command: ["--verbose", "api", "start-faststream", "--create-tables"]
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - GRADER_DB_CONN=postgresql+asyncpg://postgres:postgres@postgres:5432/grader
+      - GRADER_FASTSTREAM_BROKER=amqp://admin:admin@rabbitmq:5672/
+      - GRADER_FASTSTREAM_BROKER_QUEUE=grader-queue
+      - GRADER_FASTSTREAM_MAX_CONCURRENCY=1
       
 configs:
   rabbitmq_consumer_settings:
