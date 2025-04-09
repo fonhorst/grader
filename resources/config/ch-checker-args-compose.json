@@ -1,0 +1,8 @@
+{
+    "host": "172.17.0.1",
+    "user": "admin", 
+    "password": "admin", 
+    "student_username": "tutor",
+    "cluster_name": "main_cluster"
+}
+
