@@ -91,7 +91,7 @@ def checker():
 
 
 @cli.group()
-def api():
+def serve():
     pass
 
 
@@ -435,7 +435,7 @@ def run(checker: str, arguments: str, output: str):
         sys.exit(1)
 
 
-@api.command()
+@serve.command()
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
 @click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')
 @click.option('--reload', '-r', is_flag=True, help='Enable auto-reload on code changes')
@@ -465,7 +465,7 @@ def start_api(host: str, port: int, reload: bool):
         sys.exit(1)
 
 
-@api.command()
+@serve.command()
 @click.option('--create-tables', '-c', is_flag=True, default=False, help='Create database tables before starting')
 def start_faststream(create_tables: bool):
     """Start the FastStream worker for processing tasks."""
@@ -484,6 +484,8 @@ def start_faststream(create_tables: bool):
             logger.info("Database tables created successfully")
         
         logger.info("Starting FastStream app")
+        # TODO: we don't currently support multiple workers in CLI
+        # Consider using FastStream CLI instead
         _run_imported_app(
             app,
             extra_options=dict(),
