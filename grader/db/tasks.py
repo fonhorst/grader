@@ -590,7 +590,6 @@ async def list_students(
         handle_name_like(filters, Student.name, name)
         handle_name_like(filters, Student.group, group)
         handle_name_like(filters, Student.tag, tag)
-        handle_name_like(filters, Student.course_id, course_id)
         
         if filters:
             query = query.where(*filters)
