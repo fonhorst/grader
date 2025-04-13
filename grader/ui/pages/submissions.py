@@ -1,8 +1,14 @@
 import streamlit as st
-from grader.client import GraderAPIClient
+from grader.client.grader import GraderAPIClient
 import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
+import os
+from hdfs import InsecureClient
+import uuid
+import tempfile
+
+from grader.schemes import TaskSubmitRequest
 
 st.set_page_config(
     page_title="Submissions",
@@ -21,6 +27,27 @@ if 'filters' not in st.session_state:
         'date_from': datetime.now() - timedelta(days=30),
         'date_to': datetime.now()
     }
+
+# Define checker types and their parameters
+CHECKER_TYPES = {
+    "ClickHouse": {
+        "host": {"type": "text", "default": "localhost"},
+        "user": {"type": "text", "default": "admin"},
+        "password": {"type": "text", "default": None, "password": True},
+        "student_username": {"type": "text", "default": None},
+        "cluster_name": {"type": "text", "default": "main_cluster"}
+    },
+    "Spark": {
+        "script_path": {"type": "text", "default": None},
+        "input_data_path": {"type": "text", "default": None},
+        "gold_data_path": {"type": "text", "default": None},
+        "output_dir": {"type": "text", "default": None},
+        "timeout": {"type": "number", "default": 30},
+        "include_logs": {"type": "boolean", "default": True},
+        "hdfs_host": {"type": "text", "default": None},
+        "hdfs_port": {"type": "number", "default": None}
+    }
+}
 
 # Add filter controls in the sidebar
 with st.sidebar:
@@ -140,4 +167,103 @@ if submissions:
     # Display count of filtered results
     st.caption(f"Showing {len(submissions)} submissions")
 else:
-    st.info("No submissions found matching the selected filters.") 
+    st.info("No submissions found matching the selected filters.")
+
+# Add submit button in the center
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    if st.button("Submit New Lab", type="primary"):
+        st.session_state.show_submit_modal = True
+
+# Show submit modal if triggered
+if st.session_state.get('show_submit_modal', False):
+    with st.form("submit_form"):
+        st.subheader("Submit New Lab")
+        
+        # Select checker type
+        checker_type = st.selectbox(
+            "Lab Type",
+            options=list(CHECKER_TYPES.keys())
+        )
+        
+        # Get parameters for selected checker
+        params = CHECKER_TYPES[checker_type]
+        form_data = {}
+        
+        # Create form fields based on checker parameters
+        for param_name, param_config in params.items():
+            if param_config["type"] == "text":
+                form_data[param_name] = st.text_input(
+                    param_name.replace("_", " ").title(),
+                    value=param_config["default"],
+                    type="password" if param_config.get("password", False) else "default"
+                )
+            elif param_config["type"] == "number":
+                form_data[param_name] = st.number_input(
+                    param_name.replace("_", " ").title(),
+                    value=param_config["default"]
+                )
+            elif param_config["type"] == "boolean":
+                form_data[param_name] = st.checkbox(
+                    param_name.replace("_", " ").title(),
+                    value=param_config["default"]
+                )
+        
+        # File upload
+        uploaded_file = st.file_uploader("Upload Lab File", type=None)
+        
+        # Form submission buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            submit = st.form_submit_button("Submit")
+        with col2:
+            if st.form_submit_button("Cancel"):
+                st.session_state.show_submit_modal = False
+                st.rerun()
+        
+        if submit and uploaded_file:
+            try:
+                # Initialize HDFS client
+                hdfs_client = InsecureClient(
+                    f"http://{os.environ['HDFS_HOST']}:{os.environ['HDFS_PORT']}",
+                    user=os.environ.get('HDFS_USER', 'hadoop')
+                )
+                
+                # Generate unique filename
+                file_ext = os.path.splitext(uploaded_file.name)[1]
+                unique_filename = f"{uuid.uuid4()}{file_ext}"
+                hdfs_path = f"{os.environ['HDFS_SUBMISSIONS_DIR']}/{unique_filename}"
+                
+                # Save file to temporary location
+                with tempfile.NamedTemporaryFile() as tmp_file:
+                    tmp_file.write(uploaded_file.getvalue())
+                    tmp_file_path = tmp_file.name
+                
+                    # Upload to HDFS
+                    hdfs_client.upload(hdfs_path, tmp_file_path)
+                
+                # Update form data with HDFS path
+                form_data["attachment"] = hdfs_path
+                
+                # Submit task using API client
+                async def submit_task():
+                    async with GraderAPIClient() as client:
+                        return await client.submit_task(
+                            request=TaskSubmitRequest(
+                                user_id=form_data.get("student_username", "default_user"),
+                                tag=checker_type,
+                                **form_data
+                            )
+                        )
+                
+                # Submit the task
+                task = asyncio.run(submit_task())
+                
+                st.success(f"Lab submitted successfully! Task ID: {task.id}")
+                st.session_state.show_submit_modal = False
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error submitting lab: {str(e)}")
+        elif submit:
+            st.error("Please upload a file before submitting.") 
