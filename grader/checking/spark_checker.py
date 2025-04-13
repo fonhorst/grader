@@ -14,6 +14,10 @@ import nbconvert
 import nbformat
 from pyspark.errors import SparkRuntimeException
 from pyspark.sql.utils import AnalysisException, PythonException
+import subprocess
+import time
+import signal
+from pathlib import Path
 
 from grader.checking.base import CheckableQuery, CheckerReport, LabChecker
 
@@ -590,243 +594,172 @@ def check_task4(student, gold, **kwargs) -> None:
 class SparkChecker(LabChecker):
     def __init__(self, 
                  spark: SparkSession,
-                 itmo_posts: DataFrame,
-                 followers_posts_likes: DataFrame,
-                 followers_posts: DataFrame,
-                 emojis_data: dict,
-                 student_username: str = None):
-        self.spark = spark
-        self.itmo_posts = itmo_posts
-        self.followers_posts_likes = followers_posts_likes
-        self.followers_posts = followers_posts
-        self.emojis_data = emojis_data
-        self.student_username = student_username
-        self.checker_report = CheckerReport(checks=[])
-        
-    def execute_validation_queries(self, validation_queries: List[CheckableQuery]) -> bool:
-        """Execute validation queries to check data correctness
+                 input_data_path: str,
+                 gold_data_path: str,
+                 output_dir: str,
+                 timeout: int = 30,
+                 include_logs: bool = True):
+        """Initialize SparkChecker
         
         Args:
-            validation_queries: List of queries to validate
-            
-        Returns:
-            bool: True if all required queries passed
+            spark: SparkSession instance
+            input_data_path: Path to input dataset
+            gold_data_path: Path to gold standard data
+            output_dir: Directory where student's script will save results
+            timeout: Maximum time in seconds to wait for student's script
+            include_logs: Whether to include process logs in CheckerReport
         """
-        logger.info("=== Executing validation queries ===")
+        self.spark = spark
+        self.input_data_path = input_data_path
+        self.gold_data_path = gold_data_path
+        self.output_dir = output_dir
+        self.timeout = timeout
+        self.include_logs = include_logs
+        self.checker_report = CheckerReport(checks=[])
         
-        for query in validation_queries:
-            try:
-                result = self.spark.sql(query.query)
-                if query.validate(result):
-                    success_msg = f"Successfully executed query: {query.query}"
-                    logger.info(success_msg)
-                    self.checker_report.success(
-                        description=query.description
-                    )
-                else:
-                    error_msg = f"Query returned no results: {query.query}"
-                    logger.error(error_msg)
-                    self.checker_report.fail(
-                        description=query.description,
-                        reason=error_msg
-                    )
-            except Exception as e:
-                error_msg = f"Error executing query: {query.query}\nError: {str(e)}"
-                logger.error(error_msg)
-                self.checker_report.fail(
-                    description=query.description,
-                    reason=error_msg,
-                    required=True
-                )
-        
-        return True
+        # Create output directory if it doesn't exist
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    def run_checks(self, nb_path: str, skip_tasks: tuple = ()) -> CheckerReport:
+    def run_checks(self, script_path: str) -> CheckerReport:
         """Run all checks for the Spark lab implementation
         
         Args:
-            nb_path: Path to the notebook file
-            skip_tasks: Tuple of task names to skip
+            script_path: Path to student's Python script
             
         Returns:
             CheckerReport containing results of all checks
         """
-
-        # TODO: Need to completely refactor the logic of checking
-        # 1. We receieve a python script from the student (via the path argument of the class's constructor). 
-        # We also add an additional argument to the constructor that allows to include the logs of the process into the CheckerReport.
-        # The student's script should:
-        # - have a simple CLI interface to pass parameters to the script: 
-        # --in (path to the input dataset), --out (path to an output directory, where all the resulting dataframes will be saved)        
-        # 2. Than create a separate python process to run this script and pass all the parameters to it
-        # 3. We wait for no more than 30 seconds for the script to finish (it is a separate check):
-        # - if it doesn't finish in 30 seconds, we kill the process and return the CheckerReport with the error message
-        # - if it finishes, we check its exit code. If it is 0, we continue the execution. Otherwise, we return the CheckerReport with the error message with the exit code
-        # - in all casses, we add the log of the process to CheckerReport (as a part of the corresponding check message)
-        # 4. After the script finishes, we perform checks on the resulting dataframes, assuming the following:
-        # - We know the exact names of the dataframes that should be present in the output directory.
-        # - We have golden resulting dataframes for each of the tasks and can compare the output dataframes with them.
-        # Note: The input dataframe and golden dataframes are available in the class's constructor (as pathes).
-        # 6. For each dataframe we do the following checks 
-        # (we do checking in the following order of execution, so if one check fails, the rest of the checks are not performed):
-        # - check if the dataframe is present in the output directory
-        # - check if the dataframe is not empty and can be read
-        # - check if the dataframe has correct columns
-        # - compare the output dataframe with the gold standard dataframe using the compare_dataframes function
-        # Note: For all checks being performed we add the corresponding messages to the CheckerReport (with fail or success methods)
-        
-        
-        
-
         # Create a fresh report
         self.checker_report = CheckerReport(checks=[])
         
-        logger.info(f"Starting checks for student: {self.student_username}")
-        
-        if not os.path.exists(nb_path):
-            error_msg = "ipynb file not found"
-            logger.error(error_msg)
+        # Check if script exists
+        if not os.path.exists(script_path):
             self.checker_report.fail(
-                description="Check if notebook exists",
-                reason=error_msg,
+                description="Check if script exists",
+                reason=f"Script not found at {script_path}",
                 required=True
             )
             return self.checker_report
+
+        # Run student's script
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                script_path,
+                "--in", self.input_data_path,
+                "--out", self.output_dir
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
 
         try:
-            student_functions = functions_only(
-                retrieve_ast_tree_from_notebook(nb_path)
-            )
-        except Exception as e:
-            error_msg = f"Broken ipynb content: {str(e)}"
-            logger.error(error_msg)
+            # Wait for process with timeout
+            stdout, stderr = process.communicate(timeout=self.timeout)
+            exit_code = process.returncode
+            
+            # Add process logs to report if requested
+            if self.include_logs:
+                log_msg = f"Script output:\n{stdout}\n\nScript errors:\n{stderr}"
+            else:
+                log_msg = None
+
+            # Check if script completed successfully
+            if exit_code != 0:
+                self.checker_report.fail(
+                    description="Check script execution",
+                    reason=f"Script failed with exit code {exit_code}",
+                    details=log_msg,
+                    required=True
+                )
+                return self.checker_report
+            else:
+                self.checker_report.success(
+                    description="Check script execution",
+                    details=log_msg,
+                    required=True
+                )
+
+        except subprocess.TimeoutExpired:
+            # Kill the process if it times out
+            process.kill()
             self.checker_report.fail(
-                description="Check notebook content",
-                reason=error_msg,
+                description="Check script execution",
+                reason=f"Script timed out after {self.timeout} seconds",
                 required=True
             )
             return self.checker_report
 
-        ctx = dict()
+        # Check each task's output
+        for task_name, task in TASKS.items():
+            try:
+                # Check if output file exists
+                output_file = os.path.join(self.output_dir, f"{task_name}.parquet")
+                if not os.path.exists(output_file):
+                    self.checker_report.fail(
+                        description=f"Check {task_name} output",
+                        reason=f"Output file not found: {output_file}",
+                        required=True
+                    )
+                    continue
 
-        # Prepare task arguments
-        task1_args = {
-            "df": self.itmo_posts,
-            "F": F
-        }
-
-        TASKS_FUNC_ARGS = {
-            "task_1a": task1_args,
-            "task_1b": task1_args,
-            "task_1c": task1_args,
-            "task_2a": {
-                "df": self.followers_posts_likes,
-                "F": F
-            },
-            "task_2b": {
-                "df": self.followers_posts,
-                "F": F
-            },
-            "task_3": {
-                "df": self.followers_posts,
-                "F": F
-            },
-            "task_4": {
-                "df": self.itmo_posts,
-                "F": F,
-                "T": T,
-                "emojis_data": self.emojis_data,
-                "broadcast_func": self.spark.sparkContext.broadcast
-            },
-            "task_5": {
-                "df": self.followers_posts_likes,
-                "F": F,
-                "W": Window,
-                "top_n_likers": 3
-            },
-            "task_6": {
-                "df": self.followers_posts_likes,
-                "F": F,
-                "W": Window
-            }
-        }
-
-        # Check each task
-        for func in student_functions:
-            func: "ast.FunctionDef"
-            task = TASKS.get(func.name, None)
-            if task and task.task_name not in skip_tasks:
+                # Read output dataframe
                 try:
-                    # Check function source code
-                    task.check_function_source_code(func)
-                    
-                    # Compile and execute function
-                    func_code = compile(ast.parse(ast.unparse(func)), f"{task.task_name}", mode="exec")
-                    exec(func_code, ctx)
-                    
-                    # Get function arguments
-                    func_args = TASKS_FUNC_ARGS[task.task_name]
-                    
-                    # Execute student function
-                    student_result = ctx[task.func_name](**func_args)
-                    
-                    # Execute gold function
-                    gold_result = task.gold_func(**func_args)
-                    
-                    # Compare results
-                    if task.check_func:
-                        task.check_func(
-                            student=student_result,
-                            gold=gold_result,
-                            sort_df_by=task.sort_df_by,
-                            sort_df_ascending=task.sort_df_ascending
-                        )
-                    else:
-                        compare_dataframes(
-                            student=student_result,
-                            gold=gold_result,
-                            sort_df_by=task.sort_df_by,
-                            sort_df_ascending=task.sort_df_ascending
-                        )
-                        
-                    success_msg = f"Task {task.task_name} completed successfully"
-                    logger.info(success_msg)
+                    student_df = self.spark.read.parquet(output_file)
+                except Exception as e:
+                    self.checker_report.fail(
+                        description=f"Check {task_name} output",
+                        reason=f"Failed to read output file: {str(e)}",
+                        required=True
+                    )
+                    continue
+
+                # Check if dataframe is not empty
+                if student_df.count() == 0:
+                    self.checker_report.fail(
+                        description=f"Check {task_name} output",
+                        reason="Output dataframe is empty",
+                        required=True
+                    )
+                    continue
+
+                # Read gold dataframe
+                gold_file = os.path.join(self.gold_data_path, f"{task_name}.parquet")
+                try:
+                    gold_df = self.spark.read.parquet(gold_file)
+                except Exception as e:
+                    self.checker_report.fail(
+                        description=f"Check {task_name} gold data",
+                        reason=f"Failed to read gold file: {str(e)}",
+                        required=True
+                    )
+                    continue
+
+                # Compare dataframes
+                try:
+                    compare_dataframes(
+                        student=student_df,
+                        gold=gold_df,
+                        sort_df_by=task.sort_df_by,
+                        sort_df_ascending=task.sort_df_ascending
+                    )
                     self.checker_report.success(
-                        description=success_msg,
-                        required=True
-                    )
-                    
-                except ValueError as e:
-                    error_msg = str(e)
-                    logger.error(f"WARN [{func.name}]: {error_msg}")
-                    self.checker_report.fail(
-                        description=f"Check {task.task_name} implementation",
-                        reason=error_msg,
-                        required=True
-                    )
-                except SyntaxError as e:
-                    error_msg = str(e)
-                    logger.error(f"WARN [{func.name}]: {error_msg}")
-                    self.checker_report.fail(
-                        description=f"Check {task.task_name} implementation",
-                        reason=error_msg,
+                        description=f"Check {task_name} results",
                         required=True
                     )
                 except AssertionError as e:
-                    error_msg = str(e)
-                    logger.error(f"WARN [{func.name}]: {error_msg}")
                     self.checker_report.fail(
-                        description=f"Check {task.task_name} results",
-                        reason=error_msg,
+                        description=f"Check {task_name} results",
+                        reason=str(e),
                         required=True
                     )
-                except Exception as e:
-                    error_msg = str(e)
-                    logger.error(f"WARN [{func.name}]: {error_msg}")
-                    self.checker_report.fail(
-                        description=f"Check {task.task_name} execution",
-                        reason=error_msg,
-                        required=True
-                    )
+
+            except Exception as e:
+                self.checker_report.fail(
+                    description=f"Check {task_name}",
+                    reason=f"Unexpected error: {str(e)}",
+                    required=True
+                )
 
         return self.checker_report 
