@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import ForeignKey, NullPool, String, UUID, TIMESTAMP, delete, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, subqueryload
 
 from grader.env import ENV_VAR_DB_CONN, ENV_VAR_ECHO_DB_QUERY
 
@@ -90,6 +90,8 @@ class Course(Base):
     description: Mapped[str] = mapped_column(String(250), nullable=True)
 
     tag: Mapped[str] = mapped_column(String(50), nullable=True)
+    
+    students: Mapped[List["Student"]] = relationship(back_populates="course")
 
 
 class Student(Base):
@@ -104,6 +106,10 @@ class Student(Base):
     tag: Mapped[str] = mapped_column(String(50), nullable=True)
 
     course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False)
+    
+    course: Mapped["Course"] = relationship(back_populates="students")
+    
+    tasks: Mapped[List["Task"]] = relationship(back_populates="student")
 
 
 # Task statuses:
@@ -136,6 +142,8 @@ class Task(Base):
     report: Mapped[str] = mapped_column(nullable=True)
 
     is_cancelled: Mapped[bool] = mapped_column(default=False)
+    
+    student: Mapped["Student"] = relationship(back_populates="tasks")
 
     def __repr__(self) -> str:
         return f"Task(id={self.id!r}, user_id={self.student_id!r}, name={self.name!r}, status={self.status!r})"
@@ -210,7 +218,13 @@ async def create_task(
 
 async def get_task(task_id: Union[str, uuid.UUID]) -> Task:
     async with AsyncSessionBuilder() as session:
-        task = await session.get(Task, task_id)
+        task = await session.get(
+            Task, 
+            task_id, 
+            options=[
+                subqueryload(Task.student).subqueryload(Student.course)
+            ]
+        )
         if not task:
             raise ValueError(f"Task with id {task_id} not found")
         return task
@@ -269,9 +283,13 @@ async def list_tasks(
         user_id: Optional[Union[str, List[str]]] = None,
         tag: Optional[Union[str, List[str]]] = None,
         statuses: Optional[List[str]] = None,
-        submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None) -> List[Task]:
+        submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None,
+        group: Optional[Union[str, List[str]]] = None,
+        course_id: Optional[Union[str, List[str]]] = None) -> List[Task]:
     async with AsyncSessionBuilder() as session:
-        query = select(Task)
+        query = select(Task).join(Task.student).options(
+            subqueryload(Task.student).subqueryload(Student.course)
+        )
 
         filters = []
         if uids:
@@ -281,7 +299,9 @@ async def list_tasks(
             (name, Task.name),
             (user_id, Task.student_id),
             (tag, Task.tag),
-            (statuses, Task.status)
+            (statuses, Task.status),
+            (group, Student.group),
+            (course_id, Student.course_id)
         ]
         for value, param in vparams:
             handle_name_like(filters, param, value)
@@ -500,7 +520,13 @@ async def create_student(
 
 async def get_student(student_id: Union[str, uuid.UUID]) -> Student:
     async with AsyncSessionBuilder() as session:
-        student = await session.get(Student, student_id)
+        student = await session.get(
+            Student, 
+            student_id, 
+            options=[
+                subqueryload(Student.course)
+            ]
+        )
         if not student:
             raise ValueError(f"Student with id {student_id} not found")
         return student
@@ -540,7 +566,9 @@ async def list_students(
     course_id: Optional[Union[str, List[str]]] = None
 ) -> List[Student]:
     async with AsyncSessionBuilder() as session:
-        query = select(Student)
+        query = select(Student).options(
+            subqueryload(Student.course)
+        )
         
         filters = []
         handle_name_like(filters, Student.name, name)

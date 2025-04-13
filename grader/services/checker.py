@@ -7,15 +7,48 @@ from faststream.rabbit import RabbitBroker
 from pydantic import BaseModel
 
 from grader.checking.checking import CheckType
-from grader.db.tasks import Task, TaskStatus, create_task, get_task, delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
+from grader.db.tasks import Course, Student, Task, TaskStatus, create_task, get_task, delete_task, list_tasks, delete_all_tasks, update_task_status_with_isolation
 from grader.faststream_tasks.schemes import CheckingTask
 
 logger = logging.getLogger(__name__)
 
 
+class CourseInfo(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: Optional[str] = None
+    tag: Optional[str] = None   
+
+    @classmethod
+    def from_db_course(cls, course: Course) -> 'CourseInfo':
+        return cls(
+            id=course.id,
+            name=course.name,
+            description=course.description,
+            tag=course.tag
+        )
+    
+
+class StudentInfo(BaseModel):
+    id: uuid.UUID
+    name: str
+    group: Optional[str] = None
+    tag: Optional[str] = None
+    course: Optional[CourseInfo] = None
+
+    @classmethod
+    def from_db_student(cls, student: Student) -> 'StudentInfo':
+        return cls(
+            id=student.id,
+            name=student.name,
+            group=student.group,
+            tag=student.tag,
+            course=CourseInfo.from_db_course(student.course) if student.course else None
+        )
+
+
 class TaskInfo(BaseModel):
     id: uuid.UUID
-    user_id: str
     name: str
     tag: Optional[str] = None
     attachment: Optional[str] = None
@@ -24,6 +57,7 @@ class TaskInfo(BaseModel):
     submit_time: datetime
     end_time: Optional[datetime] = None
     report: Optional[str] = None
+    student: Optional[StudentInfo] = None
 
     @classmethod
     def from_db_task(cls, task: Task) -> 'TaskInfo':
@@ -39,6 +73,7 @@ class TaskInfo(BaseModel):
             end_time=task.end_time,
             report=task.report
         )
+    
 
 
 class CheckerService:
