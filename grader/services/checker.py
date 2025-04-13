@@ -107,7 +107,7 @@ class CheckerService:
     async def submit(
         self,
         *,
-        user_id: str,
+        student_id: str,
         check_type: CheckType,
         args: Dict[str, Any],
         name: Optional[str] = None,
@@ -130,7 +130,7 @@ class CheckerService:
         task = await create_task(
             uid=uuid.uuid4(),
             name=name or f"Check {check_type.value}",
-            user_id=user_id,
+            student_id=student_id,
             tag=tag
         )
         

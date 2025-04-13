@@ -51,7 +51,7 @@ async def submit_task(
     """
     try:
         task_info = await checker_service.submit(
-            user_id=request.user_id,
+            student_id=request.user_id,
             check_type=request.check_type,
             args=request.args,
             name=request.name,

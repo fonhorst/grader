@@ -186,7 +186,7 @@ async def create_task(
     *,
     uid: Optional[uuid.UUID] = None,
     name: str,
-    user_id: str,
+    student_id: str,
     tag: Optional[str] = None,
     attachment: Optional[str] = None,
     submit_time: Optional[datetime.datetime] = None
@@ -198,7 +198,7 @@ async def create_task(
             task = Task(
                 id=task_id,
                 name=name,
-                user_id=user_id,
+                student_id=student_id,
                 tag=tag,
                 attachment=attachment,
                 status=TaskStatus.CREATED.value,
