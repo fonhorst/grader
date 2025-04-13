@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @pytest_asyncio.fixture(scope="function")
 async def test_course_and_student(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name):
     """Create a test course and student for task-related tests."""
-    async with TestRabbitBroker(broker, with_real=False) as br:
+    async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Create test course

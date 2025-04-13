@@ -209,13 +209,24 @@ async def create_task(
             await session.flush()  # Ensure the task is saved
             
             # Eagerly load the student relationship
-            task = await session.get(
-                Task,
-                task_id,
-                options=[
+            # task = await session.get(
+            #     Task,
+            #     task_id,
+            #     options=[
+            #         subqueryload(Task.student).subqueryload(Student.course)
+            #     ]
+            # )
+
+            stmt = await session.execute(
+                select(Task).where(Task.id == task_id).options(
                     subqueryload(Task.student).subqueryload(Student.course)
-                ]
+                )
             )
+                    
+            task = stmt.scalar_one()
+
+            task = await session.get(Task, task_id)
+
             if not task:
                 raise ValueError(f"Failed to create task with ID {task_id}")
             
