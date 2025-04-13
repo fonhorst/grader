@@ -21,11 +21,38 @@ import subprocess
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from contextlib import contextmanager
 from .base import LabChecker, CheckerReport, CheckReport
 from hdfs import InsecureClient
 
+@contextmanager
+def temporary_hdfs_directory(client: InsecureClient, base_dir: str, prefix: str = "check_") -> str:
+    """Context manager for creating and cleaning up a temporary HDFS directory."""
+    import uuid
+    
+    # Create a unique subdirectory name
+    temp_dir = f"{base_dir}/{prefix}{uuid.uuid4().hex}"
+    
+    try:
+        # Create the temporary directory
+        client.makedirs(temp_dir)
+        yield temp_dir
+    finally:
+        # Clean up the temporary directory and its contents
+        try:
+            if client.status(temp_dir, strict=False):
+                # List all files in the directory
+                files = client.list(temp_dir)
+                # Delete all files
+                for file in files:
+                    client.delete(f"{temp_dir}/{file}")
+                # Delete the directory itself
+                client.delete(temp_dir)
+        except Exception as e:
+            print(f"Warning: Failed to clean up temporary directory {temp_dir}: {e}")
+
 class HDFSChecker(LabChecker):
-    def __init__(self, hdfs_url: str, input_dir: str, output_dir: str, 
+    def __init__(self, hdfs_url: str, base_dir: str, 
                  test_data: List[Dict[str, Any]], golden_data: Dict[str, pd.DataFrame],
                  process_start_delay: int = 2,
                  file_write_interval: int = 5,
@@ -37,8 +64,7 @@ class HDFSChecker(LabChecker):
         
         Args:
             hdfs_url: HDFS WebHDFS URL
-            input_dir: Input directory path in HDFS
-            output_dir: Output directory path in HDFS
+            base_dir: Base directory path in HDFS where temporary directories will be created
             test_data: List of test data dictionaries to write to HDFS
             golden_data: Dictionary of golden data DataFrames for each date
             process_start_delay: Delay in seconds after starting the ETL process
@@ -49,8 +75,7 @@ class HDFSChecker(LabChecker):
         """
         super().__init__()
         self.hdfs_url = hdfs_url
-        self.input_dir = input_dir
-        self.output_dir = output_dir
+        self.base_dir = base_dir
         self.test_data = test_data
         self.golden_data = golden_data
         self.process: Optional[subprocess.Popen] = None
@@ -63,13 +88,13 @@ class HDFSChecker(LabChecker):
         self.etl_duration = etl_duration
         self.etl_check_interval = etl_check_interval
 
-    def start_etl_pipeline(self) -> None:
+    def start_etl_pipeline(self, input_dir: str, output_dir: str) -> None:
         """Start the ETL pipeline in a separate process."""
         cmd = [
             "python", str(self.script_path),
             "--hdfs-url", self.hdfs_url,
-            "--input-dir", self.input_dir,
-            "--output-dir", self.output_dir,
+            "--input-dir", input_dir,
+            "--output-dir", output_dir,
             "--duration", str(self.etl_duration),
             "--check-interval", str(self.etl_check_interval)
         ]
@@ -84,18 +109,14 @@ class HDFSChecker(LabChecker):
         # Wait for the process to start
         time.sleep(self.process_start_delay)
 
-    def write_test_data(self) -> None:
+    def write_test_data(self, input_dir: str) -> None:
         """Write test data to HDFS with specified intervals."""
         client = InsecureClient(self.hdfs_url)
-        
-        # Create input directory if it doesn't exist
-        if not client.status(self.input_dir, strict=False):
-            client.makedirs(self.input_dir)
         
         # Write each test data file with specified intervals
         for i, data in enumerate(self.test_data):
             file_name = f"test_data_{i+1}.csv"
-            file_path = f"{self.input_dir}/{file_name}"
+            file_path = f"{input_dir}/{file_name}"
             
             # Convert data to DataFrame and write to HDFS
             df = pd.DataFrame(data)
@@ -107,16 +128,16 @@ class HDFSChecker(LabChecker):
         # Wait after the last file
         time.sleep(self.final_wait_time)
 
-    def check_output_files(self, report: CheckerReport) -> None:
+    def check_output_files(self, report: CheckerReport, output_dir: str) -> None:
         """Check if output files match the golden data."""
         client = InsecureClient(self.hdfs_url)
         
         try:
             # Get all date directories in output directory
-            dates = client.list(self.output_dir)
+            dates = client.list(output_dir)
             
             for date in dates:
-                output_file = f"{self.output_dir}/{date}/aggregated_data.csv"
+                output_file = f"{output_dir}/{date}/aggregated_data.csv"
                 
                 # Check if file exists
                 if not client.status(output_file, strict=False):
@@ -162,11 +183,30 @@ class HDFSChecker(LabChecker):
                         )
                         return
                 
-                # Compare values
-                if not output_df.equals(golden_df):
+                # Compare values using DataFrame.compare
+                try:
+                    differences = output_df.compare(
+                        golden_df,
+                        align_axis=1,  # Align differences horizontally
+                        keep_shape=True,  # Keep all rows and columns
+                        keep_equal=False,  # Don't show equal values
+                        result_names=('output', 'golden')  # Custom names for comparison
+                    )
+                    
+                    if not differences.empty:
+                        # Format differences for error message
+                        diff_str = differences.to_string()
+                        report.fail(
+                            f"Check data values for date {date}",
+                            f"Data mismatch found:\n{diff_str}",
+                            check_group="Output Files"
+                        )
+                        return
+                    
+                except ValueError as e:
                     report.fail(
                         f"Check data values for date {date}",
-                        f"Data mismatch for date {date}",
+                        f"Error comparing data: {str(e)}",
                         check_group="Output Files"
                     )
                     return
@@ -186,54 +226,59 @@ class HDFSChecker(LabChecker):
     def run_checks(self) -> CheckerReport:
         """Run the checker."""
         report = CheckerReport()
+        client = InsecureClient(self.hdfs_url)
         
         try:
-            # Start ETL pipeline
-            self.start_etl_pipeline()
-            if not self.process:
-                report.fail(
+            # Create temporary directories for input and output
+            with temporary_hdfs_directory(client, self.base_dir, "input_") as input_dir, \
+                 temporary_hdfs_directory(client, self.base_dir, "output_") as output_dir:
+                
+                # Start ETL pipeline
+                self.start_etl_pipeline(input_dir, output_dir)
+                if not self.process:
+                    report.fail(
+                        "Start ETL pipeline",
+                        "Failed to start ETL pipeline",
+                        check_group="Process"
+                    )
+                    return report
+                
+                report.success(
                     "Start ETL pipeline",
-                    "Failed to start ETL pipeline",
                     check_group="Process"
                 )
-                return report
-            
-            report.success(
-                "Start ETL pipeline",
-                check_group="Process"
-            )
-            
-            # Write test data
-            self.write_test_data()
-            report.success(
-                "Write test data",
-                check_group="Process"
-            )
-            
-            # Check if process is still running
-            if self.process.poll() is not None:
-                report.fail(
+                
+                # Write test data
+                self.write_test_data(input_dir)
+                report.success(
+                    "Write test data",
+                    check_group="Process"
+                )
+                
+                # Check if process is still running
+                if self.process.poll() is not None:
+                    report.fail(
+                        "Check ETL pipeline running",
+                        "ETL pipeline terminated prematurely",
+                        check_group="Process"
+                    )
+                    return report
+                
+                report.success(
                     "Check ETL pipeline running",
-                    "ETL pipeline terminated prematurely",
                     check_group="Process"
                 )
-                return report
-            
-            report.success(
-                "Check ETL pipeline running",
-                check_group="Process"
-            )
-            
-            # Stop the process
-            self.process.terminate()
-            self.process.wait(timeout=5)
-            report.success(
-                "Stop ETL pipeline",
-                check_group="Process"
-            )
-            
-            # Check output files
-            self.check_output_files(report)
+                
+                # Stop the process
+                self.process.terminate()
+                self.process.wait(timeout=5)
+                report.success(
+                    "Stop ETL pipeline",
+                    check_group="Process"
+                )
+                
+                # Check output files
+                self.check_output_files(report, output_dir)
             
         except Exception as e:
             report.fail(
