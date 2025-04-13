@@ -10,6 +10,7 @@ class CheckType(str, Enum):
     CLICKHOUSE = "clickhouse"
     SPARK = "spark"
     K8S = "k8s"
+    HDFS = "hdfs"
 
 
 def run_checking(check_type: CheckType, **kwargs) -> CheckerReport:
@@ -26,6 +27,10 @@ def run_checking(check_type: CheckType, **kwargs) -> CheckerReport:
             case CheckType.K8S:
                 from grader.checking.k8s_checker import KubernetesChecker
                 checker = KubernetesChecker(**kwargs)
+
+            case CheckType.HDFS:
+                from grader.checking.hdfs_checker import HDFSChecker
+                checker = HDFSChecker(**kwargs)
             
             case _:
                 raise ValueError(f"Unsupported check type: {check_type}")

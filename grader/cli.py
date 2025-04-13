@@ -515,6 +515,74 @@ def k8s(namespace: str, report: str, log_file: str):
         exit(1)
 
 
+@checker.command()
+@click.option('--hdfs-url', required=True, help='HDFS WebHDFS URL')
+@click.option('--base-dir', required=True, help='Base directory path in HDFS where temporary directories will be created')
+@click.option('--test-data', type=click.Path(exists=True), required=True, help='Path to JSON file containing test data')
+@click.option('--golden-data', type=click.Path(exists=True), required=True, help='Path to JSON file containing golden data')
+@click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
+@click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
+@click.option('--process-start-delay', type=int, default=2, help='Delay in seconds after starting the ETL process')
+@click.option('--file-write-interval', type=int, default=5, help='Interval in seconds between writing test files')
+@click.option('--final-wait-time', type=int, default=5, help='Time to wait after writing the last file')
+@click.option('--etl-duration', type=int, default=30, help='Duration in minutes for the ETL process to run')
+@click.option('--etl-check-interval', type=int, default=5, help='Interval in seconds for the ETL process to check for new files')
+def hdfs(hdfs_url: str, base_dir: str, test_data: str, golden_data: str, report: str, log_file: str,
+         process_start_delay: int, file_write_interval: int, final_wait_time: int,
+         etl_duration: int, etl_check_interval: int):
+    """Run HDFS checker directly.
+    
+    This command runs the HDFS checker without using the task queue service.
+    It will check the ETL pipeline functionality by:
+    1. Starting the ETL pipeline
+    2. Writing test data to HDFS
+    3. Verifying the output against golden data
+    """
+    from grader.checking.hdfs_checker import HDFSChecker
+    import json
+    import pandas as pd
+    
+    try:
+        # Load test and golden data
+        with open(test_data, 'r') as f:
+            test_data_list = json.load(f)
+        
+        with open(golden_data, 'r') as f:
+            golden_data_dict = {
+                date: pd.DataFrame(data)
+                for date, data in json.load(f).items()
+            }
+        
+        # Run checker
+        checker = HDFSChecker(
+            hdfs_url=hdfs_url,
+            base_dir=base_dir,
+            test_data=test_data_list,
+            golden_data=golden_data_dict,
+            process_start_delay=process_start_delay,
+            file_write_interval=file_write_interval,
+            final_wait_time=final_wait_time,
+            etl_duration=etl_duration,
+            etl_check_interval=etl_check_interval
+        )
+        report_result = checker.run_checks()
+        
+        # Save report as Markdown
+        markdown_report = report_result.to_markdown()
+        with open(report, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {report}")
+        
+        if not report_result.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        exit(1)
+
+
 @serve.command()
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
 @click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')

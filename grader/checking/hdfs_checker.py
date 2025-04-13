@@ -230,8 +230,9 @@ class HDFSChecker(LabChecker):
         
         try:
             # Create temporary directories for input and output
-            with temporary_hdfs_directory(client, self.base_dir, "input_") as input_dir, \
-                 temporary_hdfs_directory(client, self.base_dir, "output_") as output_dir:
+            with temporary_hdfs_directory(client, self.base_dir, "hdfs_checker_") as tmp_dir:
+                input_dir = client.makedirs(f"{tmp_dir}/input")
+                output_dir = client.makedirs(f"{tmp_dir}/output")
                 
                 # Start ETL pipeline
                 self.start_etl_pipeline(input_dir, output_dir)
