@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 
+import grader
 from grader.checking.base import CheckerReport
 from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
 from grader.schemes import TaskSubmitRequest
@@ -81,6 +82,11 @@ def cli(verbose: bool):
 
 
 @cli.group()
+def ui():
+    pass
+
+
+@cli.group()
 def task():
     pass
 
@@ -98,6 +104,14 @@ def serve():
 @cli.group()
 def k8s():
     pass
+
+
+@ui.command()
+def serve():
+    import nest_asyncio
+    from streamlit.web import cli
+
+    cli.main_run([os.path.join(grader.__path__[0], "ui", "main.py")])
 
 
 @task.command()
