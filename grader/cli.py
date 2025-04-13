@@ -482,6 +482,39 @@ def run(checker: str, arguments: str, output: str):
         sys.exit(1)
 
 
+@checker.command()
+@click.option('--namespace', '-n', required=True, help='Kubernetes namespace to check resources in')
+@click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
+@click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
+def k8s(namespace: str, report: str, log_file: str):
+    """Run Kubernetes checker directly.
+    
+    This command runs the Kubernetes checker without using the task queue service.
+    It will check the configuration of Kubernetes resources in the specified namespace.
+    """
+    from grader.checking.k8s_checker import KubernetesChecker
+    
+    try:
+        # Run checker
+        checker = KubernetesChecker(namespace=namespace)
+        report_result = checker.run_checks()
+        
+        # Save report as Markdown
+        markdown_report = report_result.to_markdown()
+        with open(report, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {report}")
+        
+        if not report_result.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        exit(1)
+
+
 @serve.command()
 @click.option('--host', '-h', default="0.0.0.0", show_default=True, help='Host address to bind to')
 @click.option('--port', '-p', default=8080, show_default=True, type=int, help='Port to listen on')

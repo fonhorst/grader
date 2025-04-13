@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 class CheckType(str, Enum):
     CLICKHOUSE = "clickhouse"
     SPARK = "spark"
+    K8S = "k8s"
 
 
 def run_checking(check_type: CheckType, **kwargs) -> CheckerReport:
@@ -21,6 +22,10 @@ def run_checking(check_type: CheckType, **kwargs) -> CheckerReport:
             case CheckType.SPARK:
                 from grader.checking.spark_checker import SparkChecker
                 checker = SparkChecker(**kwargs)
+
+            case CheckType.K8S:
+                from grader.checking.k8s_checker import KubernetesChecker
+                checker = KubernetesChecker(**kwargs)
             
             case _:
                 raise ValueError(f"Unsupported check type: {check_type}")
