@@ -617,6 +617,12 @@ async def list_students(
         handle_name_like(filters, Student.group, group)
         handle_name_like(filters, Student.tag, tag)
         
+        if course_id is not None:
+            if isinstance(course_id, list):
+                filters.append(Student.course_id.in_([uuid.UUID(cid) for cid in course_id]))
+            else:
+                filters.append(Student.course_id == uuid.UUID(course_id))
+        
         if filters:
             query = query.where(*filters)
             

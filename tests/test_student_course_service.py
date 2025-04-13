@@ -191,11 +191,11 @@ async def test_student_course_relationship(clean_tasks_table):
     assert updated_student.course_name == course2.name
     
     # Verify student appears in new course's list
-    course2_students = await service.list_students(course_id=course2.id)
+    course2_students = await service.list_students(course_id=str(course2.id))
     assert any(s.id == student.id for s in course2_students)
     
     # Verify student no longer appears in old course's list
-    course1_students = await service.list_students(course_id=course1.id)
+    course1_students = await service.list_students(course_id=str(course1.id))
     assert not any(s.id == student.id for s in course1_students)
 
 
