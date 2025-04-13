@@ -83,72 +83,10 @@ class TaskInfo(BaseModel):
             group=task.student.group,
             course_id=task.student.course_id,
             course_name=task.student.course.name
-        )
-    
+        ) 
 
 
-class CheckerService:
-    def __init__(self, queue: str, broker: RabbitBroker):
-        self.broker = broker
-        self.queue = queue
-
-    # TODO: add the following methods:
-    # - create_course
-    # - get_course
-    # - update_course
-    # - delete_course
-    # - list_courses
-    # - create_students
-    # - get_student
-    # - update_student
-    # - delete_student
-    # - list_students
-
-    async def submit(
-        self,
-        *,
-        student_id: str,
-        check_type: CheckType,
-        args: Dict[str, Any],
-        name: Optional[str] = None,
-        tag: Optional[str] = None
-    ) -> TaskInfo:
-        """
-        Submit a new checking task.
-        
-        Args:
-            student_id: ID of the student submitting the task
-            check_type: Type of check to perform
-            args: Arguments for the checker
-            name: Optional name for the task
-            tag: Optional tag for the task
-            
-        Returns:
-            Created task response
-        """
-        # Create task in database with eager loading of student
-        task = await create_task(
-            uid=uuid.uuid4(),
-            name=name or f"Check {check_type.value}",
-            student_id=student_id,
-            tag=tag
-        )
-        
-        # Create checking task for faststream
-        checking_task = CheckingTask(
-            task_uid=str(task.id),
-            user_id=task.student_id,  # Changed from student_id to task.student_id for consistency
-            name=task.name,
-            check_type=check_type,
-            args=args
-        )
-        
-        # Send task to queue
-        await self.broker.publish(checking_task, self.queue)
-        logger.info(f"Task {task.id} sent to queue")
-        
-        return TaskInfo.from_db_task(task)
-
+class StudentCourseService:
     async def create_course(
         self,
         *,
@@ -345,6 +283,58 @@ class CheckerService:
             course_id=course_id
         )
         return [StudentInfo.from_db_student(student) for student in students]
+    
+
+
+class CheckerService:
+    def __init__(self, queue: str, broker: RabbitBroker):
+        self.broker = broker
+        self.queue = queue
+
+    async def submit(
+        self,
+        *,
+        student_id: str,
+        check_type: CheckType,
+        args: Dict[str, Any],
+        name: Optional[str] = None,
+        tag: Optional[str] = None
+    ) -> TaskInfo:
+        """
+        Submit a new checking task.
+        
+        Args:
+            student_id: ID of the student submitting the task
+            check_type: Type of check to perform
+            args: Arguments for the checker
+            name: Optional name for the task
+            tag: Optional tag for the task
+            
+        Returns:
+            Created task response
+        """
+        # Create task in database with eager loading of student
+        task = await create_task(
+            uid=uuid.uuid4(),
+            name=name or f"Check {check_type.value}",
+            student_id=student_id,
+            tag=tag
+        )
+        
+        # Create checking task for faststream
+        checking_task = CheckingTask(
+            task_uid=str(task.id),
+            user_id=task.student_id,  # Changed from student_id to task.student_id for consistency
+            name=task.name,
+            check_type=check_type,
+            args=args
+        )
+        
+        # Send task to queue
+        await self.broker.publish(checking_task, self.queue)
+        logger.info(f"Task {task.id} sent to queue")
+        
+        return TaskInfo.from_db_task(task)
 
     async def cancel(self, task_id: Union[str, uuid.UUID]) -> bool:
         """
