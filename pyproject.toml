@@ -43,6 +43,7 @@ aio-pika = "^9.5.5"
 typer = "^0.15.2"
 pyspark = {version = "^3.5.5", optional = true}
 hdfs = "^2.7.3"
+streamlit = {version = "^1.44.1", optional = true}
 
 [tool.poetry.scripts]
 graderctl = "grader.cli:cli"
@@ -64,6 +65,9 @@ ruff = "^0.11.4"
 [tool.poetry.extras]
 pyspark = [
     "pyspark"
+]
+streamlit = [
+    "streamlit"
 ]
 
 [build-system]
