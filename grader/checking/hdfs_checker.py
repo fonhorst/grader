@@ -24,6 +24,7 @@ from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
 from .base import LabChecker, CheckerReport, CheckReport
 from hdfs import InsecureClient
+from .utils import is_hdfs_path, download_from_hdfs, get_local_script_path
 
 @contextmanager
 def temporary_hdfs_directory(client: InsecureClient, base_dir: str, prefix: str = "check_") -> str:
@@ -90,8 +91,15 @@ class HDFSChecker(LabChecker):
 
     def start_etl_pipeline(self, input_dir: str, output_dir: str) -> None:
         """Start the ETL pipeline in a separate process."""
+        # Get local path to script if it's on HDFS
+        local_script_path = get_local_script_path(
+            str(self.script_path),
+            self.hdfs_url.split(':')[0],  # Extract host from URL
+            int(self.hdfs_url.split(':')[1])  # Extract port from URL
+        )
+        
         cmd = [
-            "python", str(self.script_path),
+            "python", local_script_path,
             "--hdfs-url", self.hdfs_url,
             "--input-dir", input_dir,
             "--output-dir", output_dir,

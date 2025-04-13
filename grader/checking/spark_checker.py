@@ -14,6 +14,7 @@ from hdfs import InsecureClient
 from urllib.parse import urlparse
 
 from grader.checking.base import CheckerReport, LabChecker
+from grader.checking.utils import get_local_script_path
 
 logger = logging.getLogger(__name__)
 
@@ -172,51 +173,6 @@ class SparkChecker(LabChecker):
         # Create output directory if it doesn't exist
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    def _is_hdfs_path(self, path: str) -> bool:
-        """Check if path is an HDFS URL"""
-        try:
-            result = urlparse(path)
-            return result.scheme in ('hdfs', 'webhdfs')
-        except:
-            return False
-
-    def _download_from_hdfs(self, hdfs_path: str, local_path: str) -> None:
-        """Download file from HDFS to local path
-        
-        Args:
-            hdfs_path: HDFS path to download from
-            local_path: Local path to save to
-        """
-        if not self.hdfs_host or not self.hdfs_port:
-            raise ValueError("HDFS host and port must be provided for HDFS downloads")
-
-        # Create HDFS client
-        hdfs_client = InsecureClient(f'http://{self.hdfs_host}:{self.hdfs_port}')
-        
-        # Download file
-        hdfs_client.download(hdfs_path, local_path, overwrite=True)
-        logger.info(f"Downloaded {hdfs_path} to {local_path}")
-
-    def _get_local_script_path(self) -> str:
-        """Get local path to script, downloading from HDFS if necessary
-        
-        Returns:
-            Local path to script
-        """
-        if not self._is_hdfs_path(self.script_path):
-            return self.script_path
-
-        # Create temporary file for downloaded script
-        temp_dir = tempfile.mkdtemp()
-        local_path = os.path.join(temp_dir, os.path.basename(self.script_path))
-        
-        try:
-            self._download_from_hdfs(self.script_path, local_path)
-            return local_path
-        except Exception as e:
-            logger.error(f"Failed to download script from HDFS: {str(e)}")
-            raise
-
     @contextmanager
     def _spark_session(self) -> Generator[SparkSession, None, None]:
         """Context manager for creating and cleaning up temporary directory"""
@@ -237,7 +193,7 @@ class SparkChecker(LabChecker):
         
         # Get local path to script
         try:
-            local_script_path = self._get_local_script_path()
+            local_script_path = get_local_script_path(self.script_path, self.hdfs_host, self.hdfs_port)
         except Exception as e:
             self.checker_report.fail(
                 description="Check if script exists",
