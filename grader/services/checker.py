@@ -117,7 +117,7 @@ class CheckerService:
         Submit a new checking task.
         
         Args:
-            user_id: ID of the user submitting the task
+            student_id: ID of the student submitting the task
             check_type: Type of check to perform
             args: Arguments for the checker
             name: Optional name for the task
@@ -126,7 +126,7 @@ class CheckerService:
         Returns:
             Created task response
         """
-        # Create task in database
+        # Create task in database with eager loading of student
         task = await create_task(
             uid=uuid.uuid4(),
             name=name or f"Check {check_type.value}",
@@ -137,7 +137,7 @@ class CheckerService:
         # Create checking task for faststream
         checking_task = CheckingTask(
             task_uid=str(task.id),
-            user_id=task.student_id,
+            user_id=task.student_id,  # Changed from student_id to task.student_id for consistency
             name=task.name,
             check_type=check_type,
             args=args
@@ -145,7 +145,6 @@ class CheckerService:
         
         # Send task to queue
         await self.broker.publish(checking_task, self.queue)
-
         logger.info(f"Task {task.id} sent to queue")
         
         return TaskInfo.from_db_task(task)

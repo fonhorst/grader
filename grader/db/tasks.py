@@ -206,14 +206,20 @@ async def create_task(
                 submit_time=submit_time or dt
             )
             session.add(task)
-        
-        # Get task in a new transaction to ensure it's detached properly
-        task = await session.get(Task, task_id)
-        if not task:
-            raise ValueError(f"Failed to create task with ID {task_id}")
-        
-        # Make a detached copy to avoid any session-related issues
-        return task
+            await session.flush()  # Ensure the task is saved
+            
+            # Eagerly load the student relationship
+            task = await session.get(
+                Task,
+                task_id,
+                options=[
+                    subqueryload(Task.student).subqueryload(Student.course)
+                ]
+            )
+            if not task:
+                raise ValueError(f"Failed to create task with ID {task_id}")
+            
+            return task
 
 
 async def get_task(task_id: Union[str, uuid.UUID]) -> Task:
