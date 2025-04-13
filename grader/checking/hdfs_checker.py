@@ -21,11 +21,17 @@ import subprocess
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from .base import BaseChecker, CheckResult
+from .base import LabChecker, CheckerReport, CheckReport
+from hdfs import InsecureClient
 
-class HDFSChecker(BaseChecker):
+class HDFSChecker(LabChecker):
     def __init__(self, hdfs_url: str, input_dir: str, output_dir: str, 
-                 test_data: List[Dict[str, Any]], golden_data: Dict[str, pd.DataFrame]):
+                 test_data: List[Dict[str, Any]], golden_data: Dict[str, pd.DataFrame],
+                 process_start_delay: int = 2,
+                 file_write_interval: int = 5,
+                 final_wait_time: int = 5,
+                 etl_duration: int = 30,
+                 etl_check_interval: int = 5):
         """
         Initialize the HDFS checker.
         
@@ -35,6 +41,11 @@ class HDFSChecker(BaseChecker):
             output_dir: Output directory path in HDFS
             test_data: List of test data dictionaries to write to HDFS
             golden_data: Dictionary of golden data DataFrames for each date
+            process_start_delay: Delay in seconds after starting the ETL process
+            file_write_interval: Interval in seconds between writing test files
+            final_wait_time: Time to wait after writing the last file
+            etl_duration: Duration in minutes for the ETL process to run
+            etl_check_interval: Interval in seconds for the ETL process to check for new files
         """
         super().__init__()
         self.hdfs_url = hdfs_url
@@ -44,6 +55,13 @@ class HDFSChecker(BaseChecker):
         self.golden_data = golden_data
         self.process: Optional[subprocess.Popen] = None
         self.script_path = Path(__file__).parent.parent.parent / "resources" / "hdfs" / "hdfs_etl.py"
+        
+        # Delay parameters
+        self.process_start_delay = process_start_delay
+        self.file_write_interval = file_write_interval
+        self.final_wait_time = final_wait_time
+        self.etl_duration = etl_duration
+        self.etl_check_interval = etl_check_interval
 
     def start_etl_pipeline(self) -> None:
         """Start the ETL pipeline in a separate process."""
@@ -52,8 +70,8 @@ class HDFSChecker(BaseChecker):
             "--hdfs-url", self.hdfs_url,
             "--input-dir", self.input_dir,
             "--output-dir", self.output_dir,
-            "--duration", "30",
-            "--check-interval", "5"
+            "--duration", str(self.etl_duration),
+            "--check-interval", str(self.etl_check_interval)
         ]
         
         self.process = subprocess.Popen(
@@ -63,20 +81,18 @@ class HDFSChecker(BaseChecker):
             text=True
         )
         
-        # Wait a bit for the process to start
-        time.sleep(2)
+        # Wait for the process to start
+        time.sleep(self.process_start_delay)
 
     def write_test_data(self) -> None:
         """Write test data to HDFS with specified intervals."""
-        from hdfs import InsecureClient
-        
         client = InsecureClient(self.hdfs_url)
         
         # Create input directory if it doesn't exist
         if not client.status(self.input_dir, strict=False):
             client.makedirs(self.input_dir)
         
-        # Write each test data file with 5-second intervals
+        # Write each test data file with specified intervals
         for i, data in enumerate(self.test_data):
             file_name = f"test_data_{i+1}.csv"
             file_path = f"{self.input_dir}/{file_name}"
@@ -86,15 +102,13 @@ class HDFSChecker(BaseChecker):
             with client.write(file_path, overwrite=True) as writer:
                 df.to_csv(writer, index=False)
             
-            time.sleep(5)  # Wait 5 seconds between writes
+            time.sleep(self.file_write_interval)  # Wait between writes
         
-        # Wait another 5 seconds after the last file
-        time.sleep(5)
+        # Wait after the last file
+        time.sleep(self.final_wait_time)
 
-    def check_output_files(self) -> CheckResult:
+    def check_output_files(self, report: CheckerReport) -> None:
         """Check if output files match the golden data."""
-        from hdfs import InsecureClient
-        
         client = InsecureClient(self.hdfs_url)
         
         try:
@@ -106,7 +120,12 @@ class HDFSChecker(BaseChecker):
                 
                 # Check if file exists
                 if not client.status(output_file, strict=False):
-                    return CheckResult(False, f"Output file not found: {output_file}")
+                    report.fail(
+                        f"Check output file for date {date}",
+                        f"Output file not found: {output_file}",
+                        check_group="Output Files"
+                    )
+                    return
                 
                 # Read output file
                 with client.read(output_file) as reader:
@@ -114,58 +133,121 @@ class HDFSChecker(BaseChecker):
                 
                 # Check if date exists in golden data
                 if date not in self.golden_data:
-                    return CheckResult(False, f"Unexpected date in output: {date}")
+                    report.fail(
+                        f"Check date {date} in golden data",
+                        f"Unexpected date in output: {date}",
+                        check_group="Output Files"
+                    )
+                    return
                 
                 # Compare with golden data
                 golden_df = self.golden_data[date]
                 
                 # Check columns
                 if not all(col in output_df.columns for col in golden_df.columns):
-                    return CheckResult(False, f"Missing columns in output file for date {date}")
+                    report.fail(
+                        f"Check columns for date {date}",
+                        f"Missing columns in output file for date {date}",
+                        check_group="Output Files"
+                    )
+                    return
                 
                 # Check data types
                 for col in golden_df.columns:
                     if output_df[col].dtype != golden_df[col].dtype:
-                        return CheckResult(False, f"Wrong data type for column {col} in date {date}")
+                        report.fail(
+                            f"Check data types for date {date}",
+                            f"Wrong data type for column {col} in date {date}",
+                            check_group="Output Files"
+                        )
+                        return
                 
-                # Compare values (with small tolerance for floating point numbers)
+                # Compare values
                 if not output_df.equals(golden_df):
-                    return CheckResult(False, f"Data mismatch for date {date}")
-            
-            return CheckResult(True, "All output files match golden data")
+                    report.fail(
+                        f"Check data values for date {date}",
+                        f"Data mismatch for date {date}",
+                        check_group="Output Files"
+                    )
+                    return
+                
+                report.success(
+                    f"Check output file for date {date}",
+                    check_group="Output Files"
+                )
             
         except Exception as e:
-            return CheckResult(False, f"Error checking output files: {str(e)}")
+            report.fail(
+                "Check output files",
+                f"Error checking output files: {str(e)}",
+                check_group="Output Files"
+            )
 
-    def run(self) -> CheckResult:
+    def run_checks(self) -> CheckerReport:
         """Run the checker."""
+        report = CheckerReport()
+        
         try:
             # Start ETL pipeline
             self.start_etl_pipeline()
             if not self.process:
-                return CheckResult(False, "Failed to start ETL pipeline")
+                report.fail(
+                    "Start ETL pipeline",
+                    "Failed to start ETL pipeline",
+                    check_group="Process"
+                )
+                return report
+            
+            report.success(
+                "Start ETL pipeline",
+                check_group="Process"
+            )
             
             # Write test data
             self.write_test_data()
+            report.success(
+                "Write test data",
+                check_group="Process"
+            )
             
             # Check if process is still running
             if self.process.poll() is not None:
-                return CheckResult(False, "ETL pipeline terminated prematurely")
+                report.fail(
+                    "Check ETL pipeline running",
+                    "ETL pipeline terminated prematurely",
+                    check_group="Process"
+                )
+                return report
+            
+            report.success(
+                "Check ETL pipeline running",
+                check_group="Process"
+            )
             
             # Stop the process
             self.process.terminate()
             self.process.wait(timeout=5)
+            report.success(
+                "Stop ETL pipeline",
+                check_group="Process"
+            )
             
             # Check output files
-            return self.check_output_files()
+            self.check_output_files(report)
             
         except Exception as e:
-            return CheckResult(False, f"Error during checking: {str(e)}")
+            report.fail(
+                "Run HDFS ETL checker",
+                f"Error during checking: {str(e)}",
+                check_group="Process"
+            )
         
         finally:
             # Ensure process is terminated
             if self.process and self.process.poll() is None:
                 self.process.terminate()
                 self.process.wait(timeout=5)
+        
+        return report
 
 
