@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -127,3 +128,9 @@ class CheckableQuery(BaseModel):
     def validate(self, result) -> bool:
         """Validate the query result"""
         return result is not None and len(result) > 0
+
+
+class LabChecker(ABC):
+    @abstractmethod
+    def run_checks(self) -> CheckerReport:
+        ...
