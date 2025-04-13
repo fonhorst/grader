@@ -42,6 +42,7 @@ pyarrow = "^19.0.1"
 aio-pika = "^9.5.5"
 typer = "^0.15.2"
 pyspark = {version = "^3.5.5", optional = true}
+hdfs = "^2.7.3"
 
 [tool.poetry.scripts]
 graderctl = "grader.cli:cli"

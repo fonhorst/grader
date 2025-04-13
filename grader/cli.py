@@ -398,11 +398,13 @@ def clickhouse(host: str, user: str, student: str, cluster_name: str, output: st
 @click.option('--input', '-i', type=click.Path(exists=True, dir_okay=True), required=True, help='Path to input dataset')
 @click.option('--gold', '-g', type=click.Path(exists=True, dir_okay=True), required=True, help='Path to gold standard data')
 @click.option('--output', '-o', type=click.Path(dir_okay=True), required=True, help='Directory to save results')
-@click.option('--script', '-s', type=click.Path(exists=True, dir_okay=False), required=True, help='Path to student\'s script')
+@click.option('--script', '-s', required=True, help='Path to student\'s script (local or HDFS URL)')
 @click.option('--timeout', '-t', type=int, default=30, show_default=True, help='Maximum time in seconds to wait for script')
 @click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
 @click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
-def spark(input: str, gold: str, output: str, script: str, timeout: int, report: str, log_file: str):
+@click.option('--hdfs-host', help='HDFS host for downloading scripts (required if script is in HDFS)')
+@click.option('--hdfs-port', type=int, help='HDFS port for downloading scripts (required if script is in HDFS)')
+def spark(input: str, gold: str, output: str, script: str, timeout: int, report: str, log_file: str, hdfs_host: str, hdfs_port: int):
     """Run Spark checker directly.
     
     This command runs the Spark checker without using the task queue service.
@@ -414,11 +416,13 @@ def spark(input: str, gold: str, output: str, script: str, timeout: int, report:
         # Run checker
         report = run_checking(
             check_type=CheckType.SPARK,
-            spark=spark,
+            script_path=script,
             input_data_path=input,
             gold_data_path=gold,
             output_dir=output,
-            timeout=timeout
+            timeout=timeout,
+            hdfs_host=hdfs_host,
+            hdfs_port=hdfs_port
         )
         
         # Save report as Markdown
@@ -435,9 +439,6 @@ def spark(input: str, gold: str, output: str, script: str, timeout: int, report:
     except Exception as e:
         click.echo(f"Error running checker: {str(e)}", err=True)
         exit(1)
-    finally:
-        # Stop Spark session
-        spark.stop()
 
 
 @checker.command()

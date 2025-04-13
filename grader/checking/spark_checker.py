@@ -4,12 +4,14 @@ import logging
 import os
 import sys
 import tempfile
-from typing import Any, Generator, List
+from typing import Any, Generator, List, Optional, Tuple
 import pyspark.sql.functions as F
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
 import subprocess
 from pathlib import Path
+from hdfs import InsecureClient
+from urllib.parse import urlparse
 
 from grader.checking.base import CheckerReport, LabChecker
 
@@ -137,30 +139,83 @@ def check_task4(student: DataFrame, gold: DataFrame, **kwargs) -> None:
 
 class SparkChecker(LabChecker):
     def __init__(self, 
+                 script_path: str,
                  input_data_path: str,
                  gold_data_path: str,
                  output_dir: str,
                  timeout: int = 30,
-                 include_logs: bool = True):
+                 include_logs: bool = True,
+                 hdfs_host: Optional[str] = None,
+                 hdfs_port: Optional[int] = None):
         """Initialize SparkChecker
         
         Args:
-            spark: SparkSession instance
+            script_path: Path to student's script (local or HDFS)
             input_data_path: Path to input dataset
             gold_data_path: Path to gold standard data
             output_dir: Directory where student's script will save results
             timeout: Maximum time in seconds to wait for student's script
             include_logs: Whether to include process logs in CheckerReport
+            hdfs_host: HDFS host for downloading scripts (optional)
+            hdfs_port: HDFS port for downloading scripts (optional)
         """
+        self.script_path = script_path
         self.input_data_path = input_data_path
         self.gold_data_path = gold_data_path
         self.output_dir = output_dir
         self.timeout = timeout
         self.include_logs = include_logs
+        self.hdfs_host = hdfs_host
+        self.hdfs_port = hdfs_port
         self.checker_report = CheckerReport(checks=[])
         
         # Create output directory if it doesn't exist
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    def _is_hdfs_path(self, path: str) -> bool:
+        """Check if path is an HDFS URL"""
+        try:
+            result = urlparse(path)
+            return result.scheme in ('hdfs', 'webhdfs')
+        except:
+            return False
+
+    def _download_from_hdfs(self, hdfs_path: str, local_path: str) -> None:
+        """Download file from HDFS to local path
+        
+        Args:
+            hdfs_path: HDFS path to download from
+            local_path: Local path to save to
+        """
+        if not self.hdfs_host or not self.hdfs_port:
+            raise ValueError("HDFS host and port must be provided for HDFS downloads")
+
+        # Create HDFS client
+        hdfs_client = InsecureClient(f'http://{self.hdfs_host}:{self.hdfs_port}')
+        
+        # Download file
+        hdfs_client.download(hdfs_path, local_path, overwrite=True)
+        logger.info(f"Downloaded {hdfs_path} to {local_path}")
+
+    def _get_local_script_path(self) -> str:
+        """Get local path to script, downloading from HDFS if necessary
+        
+        Returns:
+            Local path to script
+        """
+        if not self._is_hdfs_path(self.script_path):
+            return self.script_path
+
+        # Create temporary file for downloaded script
+        temp_dir = tempfile.mkdtemp()
+        local_path = os.path.join(temp_dir, os.path.basename(self.script_path))
+        
+        try:
+            self._download_from_hdfs(self.script_path, local_path)
+            return local_path
+        except Exception as e:
+            logger.error(f"Failed to download script from HDFS: {str(e)}")
+            raise
 
     @contextmanager
     def _spark_session(self) -> Generator[SparkSession, None, None]:
@@ -171,11 +226,8 @@ class SparkChecker(LabChecker):
         finally:
             spark.stop()
 
-    def run_checks(self, script_path: str) -> CheckerReport:
+    def run_checks(self) -> CheckerReport:
         """Run all checks for the Spark lab implementation
-        
-        Args:
-            script_path: Path to student's Python script
             
         Returns:
             CheckerReport containing results of all checks
@@ -183,11 +235,22 @@ class SparkChecker(LabChecker):
         # Create a fresh report
         self.checker_report = CheckerReport(checks=[])
         
-        # Check if script exists
-        if not os.path.exists(script_path):
+        # Get local path to script
+        try:
+            local_script_path = self._get_local_script_path()
+        except Exception as e:
             self.checker_report.fail(
                 description="Check if script exists",
-                reason=f"Script not found at {script_path}",
+                reason=f"Failed to access script: {str(e)}",
+                required=True
+            )
+            return self.checker_report
+
+        # Check if script exists
+        if not os.path.exists(local_script_path):
+            self.checker_report.fail(
+                description="Check if script exists",
+                reason=f"Script not found at {local_script_path}",
                 required=True
             )
             return self.checker_report
@@ -198,7 +261,7 @@ class SparkChecker(LabChecker):
             process = subprocess.Popen(
                 [
                     sys.executable,
-                    script_path,
+                    local_script_path,
                     "--in", self.input_data_path,
                     "--out", temp_dir
                 ],
