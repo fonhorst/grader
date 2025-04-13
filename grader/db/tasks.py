@@ -590,3 +590,46 @@ async def delete_student(student_id: Union[str, uuid.UUID]):
             if student:
                 await session.delete(student)
 
+
+async def create_students(
+    students_data: List[Dict[str, Any]]
+) -> List[Student]:
+    """
+    Create multiple students in a single transaction.
+    
+    Args:
+        students_data: List of dictionaries containing student data.
+            Each dictionary should contain:
+            - name (str): Student name
+            - course_id (uuid.UUID): Course ID
+            - group (Optional[str]): Student group
+            - tag (Optional[str]): Student tag
+            - uid (Optional[uuid.UUID]): Optional student ID
+    
+    Returns:
+        List of created Student objects
+    """
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            students = []
+            for data in students_data:
+                student_id = data.get('uid') or uuid.uuid4()
+                student = Student(
+                    id=student_id,
+                    name=data['name'],
+                    course_id=data['course_id'],
+                    group=data.get('group'),
+                    tag=data.get('tag')
+                )
+                students.append(student)
+                session.add(student)
+            
+            # Get all created students in a new transaction to ensure they're detached properly
+            student_ids = [s.id for s in students]
+            created_students = await session.execute(
+                select(Student)
+                .where(Student.id.in_(student_ids))
+                .options(subqueryload(Student.course))
+            )
+            return list(created_students.scalars().all())
+
