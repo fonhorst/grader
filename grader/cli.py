@@ -6,11 +6,13 @@ from typing import Optional
 import os
 import json
 import uuid
+from pathlib import Path
 
 import grader
 from grader.checking.base import CheckerReport
 from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
 from grader.schemes import TaskSubmitRequest
+from grader.db.init_db import init_database
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,11 @@ def cli(verbose: bool):
 
 
 @cli.group()
+def test():
+    pass
+
+
+@cli.group()
 def ui():
     pass
 
@@ -103,6 +110,20 @@ def serve():
 
 @cli.group()
 def k8s():
+    pass
+
+
+@test.command()
+def fill_db_with_mock_data():
+    # TODO: implement the following logic
+    # 1. check if the database is empty
+    # 2. if it is, create tables (using appopriate models)
+    # 3. fill it with mock data. 
+    # Table representeted with Task class should contain 15 records with different statuses and different users
+    # At least 5 records should be in the finished state with Non empty reports
+    # At least 10 records should have tags
+    asyncio.run(init_database())
+
     pass
 
 
