@@ -107,7 +107,7 @@ def k8s():
 
 
 @ui.command()
-def serve():
+def run():
     import nest_asyncio
     from streamlit.web import cli
 
@@ -500,7 +500,7 @@ def run(checker: str, arguments: str, output: str):
 @click.option('--namespace', '-n', required=True, help='Kubernetes namespace to check resources in')
 @click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
 @click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
-def k8s(namespace: str, report: str, log_file: str):
+def kube(namespace: str, report: str, log_file: str):
     """Run Kubernetes checker directly.
     
     This command runs the Kubernetes checker without using the task queue service.

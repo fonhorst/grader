@@ -3665,9 +3665,9 @@ type = ["pytest-mypy"]
 
 [extras]
 pyspark = ["pyspark"]
-streamlit = ["streamlit"]
+ui = ["nest-asyncio", "streamlit"]
 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10, <3.13"
-content-hash = "be61401b3b64b96a228a4b80220d658c8b3055017a25a14d564fb95a83fd49e0"
+content-hash = "6b6611ad89bc4afbad1f9e46518471525beb2004879f0c2b5352391293199780"
