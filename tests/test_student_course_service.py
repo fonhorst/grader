@@ -108,7 +108,7 @@ async def test_student_operations(clean_tasks_table):
     assert all(s.group == "B" for s in filtered_students)
     
     # Test course filtering
-    course_students = await service.list_students(course_id=course.id)
+    course_students = await service.list_students(course_id=str(course.id))
     assert len(course_students) >= 1
     assert all(s.course_id == course.id for s in course_students)
     

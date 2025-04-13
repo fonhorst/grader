@@ -658,6 +658,17 @@ async def create_students(
     """
     async with AsyncSessionBuilder() as session:
         async with session.begin():
+            # First check if all courses exist
+            course_ids = {data['course_id'] for data in students_data}
+            stmt = select(Course).where(Course.id.in_(course_ids))
+            result = await session.execute(stmt)
+            existing_courses = {course.id for course in result.scalars().all()}
+            
+            # Check if any course is missing
+            missing_courses = course_ids - existing_courses
+            if missing_courses:
+                raise ValueError(f"Courses not found: {missing_courses}")
+            
             students = []
             for data in students_data:
                 student_id = data.get('uid') or uuid.uuid4()
