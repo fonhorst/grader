@@ -207,22 +207,12 @@ async def create_task(
             )
             session.add(task)
             await session.flush()  # Ensure the task is saved
-            
-            # Eagerly load the student relationship
-            # task = await session.get(
-            #     Task,
-            #     task_id,
-            #     options=[
-            #         subqueryload(Task.student).subqueryload(Student.course)
-            #     ]
-            # )
 
             stmt = await session.execute(
                 select(Task).where(Task.id == task_id).options(
                     subqueryload(Task.student).subqueryload(Student.course)
                 )
-            )
-                    
+            )       
             task = stmt.scalar_one()
 
             task = await session.get(Task, task_id)
@@ -235,13 +225,12 @@ async def create_task(
 
 async def get_task(task_id: Union[str, uuid.UUID]) -> Task:
     async with AsyncSessionBuilder() as session:
-        task = await session.get(
-            Task, 
-            task_id, 
-            options=[
+        stmt = await session.execute(
+            select(Task).where(Task.id == task_id).options(
                 subqueryload(Task.student).subqueryload(Student.course)
-            ]
-        )
+            )
+        )       
+        task = stmt.scalar_one()
         if not task:
             raise ValueError(f"Task with id {task_id} not found")
         return task
@@ -529,7 +518,12 @@ async def create_student(
             )
             session.add(student)
         
-        student = await session.get(Student, student_id)
+        stmt = await session.execute(
+            select(Student).where(Student.id == student_id).options(
+                subqueryload(Student.course)
+            )
+        )
+        student = stmt.scalar_one()
         if not student:
             raise ValueError(f"Failed to create student with ID {student_id}")
         return student
@@ -537,13 +531,12 @@ async def create_student(
 
 async def get_student(student_id: Union[str, uuid.UUID]) -> Student:
     async with AsyncSessionBuilder() as session:
-        student = await session.get(
-            Student, 
-            student_id, 
-            options=[
+        stmt = await session.execute(
+            select(Student).where(Student.id == student_id).options(
                 subqueryload(Student.course)
-            ]
+            )
         )
+        student = stmt.scalar_one()
         if not student:
             raise ValueError(f"Student with id {student_id} not found")
         return student
@@ -559,7 +552,13 @@ async def update_student(
 ) -> Student:
     async with AsyncSessionBuilder() as session:
         async with session.begin():
-            student = await session.get(Student, student_id)
+            stmt = await session.execute(
+                select(Student).where(Student.id == student_id).options(
+                    subqueryload(Student.course)
+                )
+            )
+            student = stmt.scalar_one()
+
             if not student:
                 raise ValueError(f"Student with id {student_id} not found")
             

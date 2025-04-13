@@ -66,13 +66,14 @@ async def test_student_operations(clean_tasks_table):
     )
     
     # 2. Create single student
-    student = await service.create_students([{
+    students = await service.create_students([{
         "name": "John Doe",
         "course_id": course.id,
         "group": "A",
         "tag": "test_student"
-    }])[0]
-    
+    }])
+    student = students[0]
+
     assert student.name == "John Doe"
     assert student.group == "A"
     assert student.tag == "test_student"
@@ -170,11 +171,12 @@ async def test_student_course_relationship(clean_tasks_table):
     course2 = await service.create_course(name="Course 2", tag="test")
     
     # Create student in first course
-    student = await service.create_students([{
+    students = await service.create_students([{
         "name": "Test Student",
         "course_id": course1.id,
         "group": "A"
-    }])[0]
+    }])
+    student = students[0]
     
     assert student.course_id == course1.id
     assert student.course_name == course1.name
