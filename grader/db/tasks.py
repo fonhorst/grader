@@ -566,15 +566,15 @@ async def update_student(
 ) -> Student:
     async with AsyncSessionBuilder() as session:
         async with session.begin():
+            # First get the student
             stmt = await session.execute(
-                select(Student).where(Student.id == student_id).options(
-                    subqueryload(Student.course)
-                )
+                select(Student).where(Student.id == student_id)
             )
             student = stmt.scalar_one_or_none()
             if not student:
                 raise ValueError(f"Student with id {student_id} not found")
             
+            # Update the student fields
             if name is not None:
                 student.name = name
             if group is not None:
@@ -584,8 +584,13 @@ async def update_student(
             if course_id is not None:
                 student.course_id = course_id
             
-            # Re-fetch the student with eager loading in a new transaction
-        async with session.begin():
+            # Flush changes to the database
+            await session.flush()
+            
+            # Expire the student object to ensure we get fresh data
+            session.expire(student)
+            
+            # Re-fetch the student with eager loading to get updated relationships
             stmt = await session.execute(
                 select(Student).where(Student.id == student_id).options(
                     subqueryload(Student.course)
