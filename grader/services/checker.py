@@ -29,7 +29,7 @@ class TaskInfo(BaseModel):
     def from_db_task(cls, task: Task) -> 'TaskInfo':
         return cls(
             id=task.id,
-            user_id=task.user_id,
+            user_id=task.student_id,
             name=task.name,
             tag=task.tag,
             attachment=task.attachment,
@@ -79,7 +79,7 @@ class CheckerService:
         # Create checking task for faststream
         checking_task = CheckingTask(
             task_uid=str(task.id),
-            user_id=task.user_id,
+            user_id=task.student_id,
             name=task.name,
             check_type=check_type,
             args=args

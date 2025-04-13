@@ -6,7 +6,7 @@ import uuid
 from typing import Optional, Dict, Union, Any, List, Tuple
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy import NullPool, String, UUID, TIMESTAMP, delete, select
+from sqlalchemy import ForeignKey, NullPool, String, UUID, TIMESTAMP, delete, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -80,6 +80,32 @@ class Base(DeclarativeBase):
     }
 
 
+class Course(Base):
+    __tablename__ = "courses"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    description: Mapped[str] = mapped_column(String(250), nullable=True)
+
+    tag: Mapped[str] = mapped_column(String(50), nullable=True)
+
+
+class Student(Base):
+    __tablename__ = "students"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    group: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    tag: Mapped[str] = mapped_column(String(50), nullable=True)
+
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), nullable=False)
+
+
 # Task statuses:
 # 0 - Created
 # 1 - Running
@@ -91,7 +117,7 @@ class Task(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
 
-    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), nullable=False)
 
     name: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -112,7 +138,7 @@ class Task(Base):
     is_cancelled: Mapped[bool] = mapped_column(default=False)
 
     def __repr__(self) -> str:
-        return f"Task(id={self.id!r}, user_id={self.user_id!r}, name={self.name!r}, status={self.status!r})"
+        return f"Task(id={self.id!r}, user_id={self.student_id!r}, name={self.name!r}, status={self.status!r})"
 
 
 async def create_tables() -> bool:
@@ -253,7 +279,7 @@ async def list_tasks(
 
         vparams = [
             (name, Task.name),
-            (user_id, Task.user_id),
+            (user_id, Task.student_id),
             (tag, Task.tag),
             (statuses, Task.status)
         ]
@@ -362,4 +388,177 @@ async def update_task_status_with_isolation(*,
             attempt += 1
             if attempt >= max_attempts:
                 raise
+
+
+async def create_course(
+    *,
+    uid: Optional[uuid.UUID] = None,
+    name: str,
+    description: Optional[str] = None,
+    tag: Optional[str] = None
+) -> Course:
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            course_id = uid or uuid.uuid4()
+            course = Course(
+                id=course_id,
+                name=name,
+                description=description,
+                tag=tag
+            )
+            session.add(course)
+        
+        course = await session.get(Course, course_id)
+        if not course:
+            raise ValueError(f"Failed to create course with ID {course_id}")
+        return course
+
+
+async def get_course(course_id: Union[str, uuid.UUID]) -> Course:
+    async with AsyncSessionBuilder() as session:
+        course = await session.get(Course, course_id)
+        if not course:
+            raise ValueError(f"Course with id {course_id} not found")
+        return course
+
+
+async def update_course(
+    course_id: Union[str, uuid.UUID],
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    tag: Optional[str] = None
+) -> Course:
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            course = await session.get(Course, course_id)
+            if not course:
+                raise ValueError(f"Course with id {course_id} not found")
+            
+            if name is not None:
+                course.name = name
+            if description is not None:
+                course.description = description
+            if tag is not None:
+                course.tag = tag
+            
+            return course
+
+
+async def list_courses(
+    *,
+    name: Optional[Union[str, List[str]]] = None,
+    tag: Optional[Union[str, List[str]]] = None
+) -> List[Course]:
+    async with AsyncSessionBuilder() as session:
+        query = select(Course)
+        
+        filters = []
+        handle_name_like(filters, Course.name, name)
+        handle_name_like(filters, Course.tag, tag)
+        
+        if filters:
+            query = query.where(*filters)
+            
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+async def delete_course(course_id: Union[str, uuid.UUID]):
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            course = await session.get(Course, course_id)
+            if course:
+                await session.delete(course)
+
+
+async def create_student(
+    *,
+    uid: Optional[uuid.UUID] = None,
+    name: str,
+    group: Optional[str] = None,
+    tag: Optional[str] = None,
+    course_id: uuid.UUID
+) -> Student:
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            student_id = uid or uuid.uuid4()
+            student = Student(
+                id=student_id,
+                name=name,
+                group=group,
+                tag=tag,
+                course_id=course_id
+            )
+            session.add(student)
+        
+        student = await session.get(Student, student_id)
+        if not student:
+            raise ValueError(f"Failed to create student with ID {student_id}")
+        return student
+
+
+async def get_student(student_id: Union[str, uuid.UUID]) -> Student:
+    async with AsyncSessionBuilder() as session:
+        student = await session.get(Student, student_id)
+        if not student:
+            raise ValueError(f"Student with id {student_id} not found")
+        return student
+
+
+async def update_student(
+    student_id: Union[str, uuid.UUID],
+    *,
+    name: Optional[str] = None,
+    group: Optional[str] = None,
+    tag: Optional[str] = None,
+    course_id: Optional[uuid.UUID] = None
+) -> Student:
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            student = await session.get(Student, student_id)
+            if not student:
+                raise ValueError(f"Student with id {student_id} not found")
+            
+            if name is not None:
+                student.name = name
+            if group is not None:
+                student.group = group
+            if tag is not None:
+                student.tag = tag
+            if course_id is not None:
+                student.course_id = course_id
+            
+            return student
+
+
+async def list_students(
+    *,
+    name: Optional[Union[str, List[str]]] = None,
+    group: Optional[Union[str, List[str]]] = None,
+    tag: Optional[Union[str, List[str]]] = None,
+    course_id: Optional[Union[str, List[str]]] = None
+) -> List[Student]:
+    async with AsyncSessionBuilder() as session:
+        query = select(Student)
+        
+        filters = []
+        handle_name_like(filters, Student.name, name)
+        handle_name_like(filters, Student.group, group)
+        handle_name_like(filters, Student.tag, tag)
+        handle_name_like(filters, Student.course_id, course_id)
+        
+        if filters:
+            query = query.where(*filters)
+            
+        result = await session.execute(query)
+        return list(result.scalars().all())
+
+
+async def delete_student(student_id: Union[str, uuid.UUID]):
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            student = await session.get(Student, student_id)
+            if student:
+                await session.delete(student)
 
