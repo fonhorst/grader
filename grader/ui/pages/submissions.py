@@ -2,7 +2,7 @@ import streamlit as st
 from grader.client.grader import GraderAPIClient
 import asyncio
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 import os
 from hdfs import InsecureClient
 import uuid
@@ -46,6 +46,18 @@ CHECKER_TYPES = {
         "include_logs": {"type": "boolean", "default": True},
         "hdfs_host": {"type": "text", "default": None},
         "hdfs_port": {"type": "number", "default": None}
+    },
+    "HDFS": {
+        "hdfs_url": {"type": "text", "default": None},
+        "base_dir": {"type": "text", "default": None},
+        "process_start_delay": {"type": "number", "default": 2},
+        "file_write_interval": {"type": "number", "default": 5},
+        "final_wait_time": {"type": "number", "default": 5},
+        "etl_duration": {"type": "number", "default": 30},
+        "etl_check_interval": {"type": "number", "default": 5}
+    },
+    "Kubernetes": {
+        "namespace": {"type": "text", "default": "default"}
     }
 }
 
