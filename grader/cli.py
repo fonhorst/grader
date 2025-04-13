@@ -395,6 +395,52 @@ def clickhouse(host: str, user: str, student: str, cluster_name: str, output: st
 
 
 @checker.command()
+@click.option('--input', '-i', type=click.Path(exists=True, dir_okay=True), required=True, help='Path to input dataset')
+@click.option('--gold', '-g', type=click.Path(exists=True, dir_okay=True), required=True, help='Path to gold standard data')
+@click.option('--output', '-o', type=click.Path(dir_okay=True), required=True, help='Directory to save results')
+@click.option('--script', '-s', type=click.Path(exists=True, dir_okay=False), required=True, help='Path to student\'s script')
+@click.option('--timeout', '-t', type=int, default=30, show_default=True, help='Maximum time in seconds to wait for script')
+@click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
+@click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
+def spark(input: str, gold: str, output: str, script: str, timeout: int, report: str, log_file: str):
+    """Run Spark checker directly.
+    
+    This command runs the Spark checker without using the task queue service.
+    It will execute the student's script and compare its output with gold standard data.
+    """
+    from grader.checking.checking import run_checking, CheckType
+    
+    try:
+        # Run checker
+        report = run_checking(
+            check_type=CheckType.SPARK,
+            spark=spark,
+            input_data_path=input,
+            gold_data_path=gold,
+            output_dir=output,
+            timeout=timeout
+        )
+        
+        # Save report as Markdown
+        markdown_report = report.to_markdown()
+        with open(report, 'w') as f:
+            f.write(markdown_report)
+        click.echo(f"Report saved to {report}")
+        
+        if not report.has_success():
+            click.echo("Checking failed!", err=True)
+            exit(1)
+        click.echo("Checking completed successfully!")
+        
+    except Exception as e:
+        click.echo(f"Error running checker: {str(e)}", err=True)
+        exit(1)
+    finally:
+        # Stop Spark session
+        spark.stop()
+
+
+@checker.command()
 @click.option('--checker', required=True, type=str, help='Fully qualified name of the checker class (e.g. grader.checking.ch_checker.ClickHouseChecker)')
 @click.option('--arguments', required=True, type=click.Path(exists=True, dir_okay=False), help='Path to JSON file with checker arguments')
 @click.option('--output', required=True, type=click.Path(dir_okay=False), help='Output path for the report in Markdown format')

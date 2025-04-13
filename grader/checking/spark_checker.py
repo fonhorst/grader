@@ -1,9 +1,10 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 import os
 import sys
 import tempfile
-from typing import Any, List
+from typing import Any, Generator, List
 import pyspark.sql.functions as F
 from pyspark.sql import DataFrame
 from pyspark.sql import SparkSession
@@ -136,7 +137,6 @@ def check_task4(student: DataFrame, gold: DataFrame, **kwargs) -> None:
 
 class SparkChecker(LabChecker):
     def __init__(self, 
-                 spark: SparkSession,
                  input_data_path: str,
                  gold_data_path: str,
                  output_dir: str,
@@ -152,7 +152,6 @@ class SparkChecker(LabChecker):
             timeout: Maximum time in seconds to wait for student's script
             include_logs: Whether to include process logs in CheckerReport
         """
-        self.spark = spark
         self.input_data_path = input_data_path
         self.gold_data_path = gold_data_path
         self.output_dir = output_dir
@@ -162,6 +161,15 @@ class SparkChecker(LabChecker):
         
         # Create output directory if it doesn't exist
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    @contextmanager
+    def _spark_session(self) -> Generator[SparkSession, None, None]:
+        """Context manager for creating and cleaning up temporary directory"""
+        try:
+            spark = SparkSession.builder.master("local[1]").getOrCreate("checker")
+            yield spark
+        finally:
+            spark.stop()
 
     def run_checks(self, script_path: str) -> CheckerReport:
         """Run all checks for the Spark lab implementation
@@ -184,7 +192,8 @@ class SparkChecker(LabChecker):
             )
             return self.checker_report
 
-        with tempfile.TemporaryDirectory(dir=self.output_dir) as temp_dir:
+        with tempfile.TemporaryDirectory(dir=self.output_dir) as temp_dir, \
+            self._spark_session() as spark:
             # Run student's script
             process = subprocess.Popen(
                 [
@@ -250,7 +259,7 @@ class SparkChecker(LabChecker):
 
                     # Read output dataframe
                     try:
-                        student_df = self.spark.read.parquet(output_file)
+                        student_df = spark.read.parquet(output_file)
                     except Exception as e:
                         self.checker_report.fail(
                             description=f"Check {task_name} output",
@@ -271,7 +280,7 @@ class SparkChecker(LabChecker):
                     # Read gold dataframe
                     gold_file = os.path.join(self.gold_data_path, f"{task_name}.parquet")
                     try:
-                        gold_df = self.spark.read.parquet(gold_file)
+                        gold_df = spark.read.parquet(gold_file)
                     except Exception as e:
                         self.checker_report.fail(
                             description=f"Check {task_name} gold data",
