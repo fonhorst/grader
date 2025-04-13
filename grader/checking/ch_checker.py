@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-from abc import ABC, abstractmethod
 import logging
 from clickhouse_driver import Client
 from typing import List, Optional, Tuple
 
-from grader.checking.base import CheckableQuery, CheckerReport
+from grader.checking.base import CheckableQuery, CheckerReport, LabChecker
 
 logger = logging.getLogger(__name__)
 
@@ -537,12 +536,6 @@ def check_data_distribution(client: Client, db_name: str, required_tables: List[
             )
             
     return checker_report
-
-
-class LabChecker(ABC):
-    @abstractmethod
-    def run_checks(self) -> CheckerReport:
-        ...
 
 
 class ClickHouseChecker(LabChecker):

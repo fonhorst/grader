@@ -41,6 +41,8 @@ pandas = "^2.2.3"
 pyarrow = "^19.0.1"
 aio-pika = "^9.5.5"
 typer = "^0.15.2"
+pyspark = {version = "^3.5.5", optional = true}
+hdfs = "^2.7.3"
 
 [tool.poetry.scripts]
 graderctl = "grader.cli:cli"
@@ -58,6 +60,11 @@ pytest-asyncio = "^0.26.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.11.4"
+
+[tool.poetry.extras]
+pyspark = [
+    "pyspark"
+]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
