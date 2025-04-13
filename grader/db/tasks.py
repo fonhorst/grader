@@ -229,8 +229,8 @@ async def get_task(task_id: Union[str, uuid.UUID]) -> Task:
             select(Task).where(Task.id == task_id).options(
                 subqueryload(Task.student).subqueryload(Student.course)
             )
-        )       
-        task = stmt.scalar_one()
+        )
+        task = stmt.scalar_one_or_none()
         if not task:
             raise ValueError(f"Task with id {task_id} not found")
         return task
@@ -246,7 +246,10 @@ async def update_task_status(task_id: Union[str, uuid.UUID], status: TaskStatus)
                     stmt = await session.execute(
                         select(Task).where(Task.id == task_id).with_for_update()
                     )
-                    task = stmt.scalar_one()
+                    task = stmt.scalar_one_or_none()
+                    if not task:
+                        raise ValueError(f"Task with id {task_id} not found")
+                    
                     curr_status = TaskStatus(task.status)
 
                     if not TaskStatus.can_proceed(curr_status, status):
@@ -332,6 +335,14 @@ async def delete_all_tasks():
             await session.execute(delete(Task))
 
 
+async def drop_all_tables():
+    async with AsyncSessionBuilder() as session:
+        async with session.begin():
+            await session.execute(delete(Task))
+            await session.execute(delete(Student))
+            await session.execute(delete(Course))
+
+
 class UpdateStatusAttempt:
     def __init__(self, is_success: bool, current_status: Optional[TaskStatus] = None):
         self.is_success = is_success
@@ -374,7 +385,10 @@ async def update_task_status_with_isolation(*,
                         select(Task).where(Task.id == task_id).with_for_update()
                     )
                     
-                    task = stmt.scalar_one()
+                    task = stmt.scalar_one_or_none()
+                    if not task:
+                        raise ValueError(f"Task with id {task_id} not found")
+                    
                     curr_status = TaskStatus(task.status)
                     
                     # Check current status
@@ -536,7 +550,7 @@ async def get_student(student_id: Union[str, uuid.UUID]) -> Student:
                 subqueryload(Student.course)
             )
         )
-        student = stmt.scalar_one()
+        student = stmt.scalar_one_or_none()
         if not student:
             raise ValueError(f"Student with id {student_id} not found")
         return student
@@ -557,8 +571,7 @@ async def update_student(
                     subqueryload(Student.course)
                 )
             )
-            student = stmt.scalar_one()
-
+            student = stmt.scalar_one_or_none()
             if not student:
                 raise ValueError(f"Student with id {student_id} not found")
             

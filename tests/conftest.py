@@ -8,7 +8,7 @@ import logging
 import pytest_asyncio
 
 from grader.faststream_tasks.tasks import broker_url, broker_queue_name
-from grader.db.tasks import TaskStatus, create_tables, delete_all_tasks, list_tasks
+from grader.db.tasks import TaskStatus, create_tables, delete_all_tasks, drop_all_tables, list_tasks
 from grader.services.checker import CheckerService, TaskInfo
 
 
@@ -36,13 +36,13 @@ def broker_queue_name():
 async def clean_tasks_table():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
     await create_tables()
-    await delete_all_tasks()
+    await drop_all_tables()
     # Return the count of tasks after cleaning (should be 0)
     tasks = await list_tasks()
     remaining_tasks = len(tasks)
     yield remaining_tasks
     # Cleanup after test as well
-    await delete_all_tasks()
+    await drop_all_tables()
 
 
 @pytest_asyncio.fixture(scope="function")
