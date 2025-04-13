@@ -17,3 +17,9 @@ st.header(
     body=" Grader UI\n##### :gray[_Запуски._]",
     divider='gray'
 )
+
+# Add navigation links
+st.markdown("### Навигация")
+st.markdown("""
+- [Просмотр отправленных работ](/submissions)
+""")
