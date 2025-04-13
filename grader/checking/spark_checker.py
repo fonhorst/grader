@@ -2,14 +2,11 @@ from dataclasses import dataclass
 import logging
 import os
 import sys
+import tempfile
 from typing import Any, List
 import pyspark.sql.functions as F
-import pyspark.sql.types as T
 from pyspark.sql import DataFrame
-from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
-from pyspark.errors import SparkRuntimeException
-from pyspark.sql.utils import AnalysisException, PythonException
 import subprocess
 from pathlib import Path
 
@@ -187,134 +184,135 @@ class SparkChecker(LabChecker):
             )
             return self.checker_report
 
-        # Run student's script
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                script_path,
-                "--in", self.input_data_path,
-                "--out", self.output_dir
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        with tempfile.TemporaryDirectory(dir=self.output_dir) as temp_dir:
+            # Run student's script
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    script_path,
+                    "--in", self.input_data_path,
+                    "--out", temp_dir
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
 
-        try:
-            # Wait for process with timeout
-            stdout, stderr = process.communicate(timeout=self.timeout)
-            exit_code = process.returncode
-            
-            # Add process logs to report if requested
-            if self.include_logs:
-                log_msg = f"Script output:\n{stdout}\n\nScript errors:\n{stderr}"
-            else:
-                log_msg = None
+            try:
+                # Wait for process with timeout
+                stdout, stderr = process.communicate(timeout=self.timeout)
+                exit_code = process.returncode
+                
+                # Add process logs to report if requested
+                if self.include_logs:
+                    log_msg = f"Script output:\n{stdout}\n\nScript errors:\n{stderr}"
+                else:
+                    log_msg = None
 
-            # Check if script completed successfully
-            if exit_code != 0:
+                # Check if script completed successfully
+                if exit_code != 0:
+                    self.checker_report.fail(
+                        description="Check script execution",
+                        reason=f"Script failed with exit code {exit_code}",
+                        details=log_msg,
+                        required=True
+                    )
+                    return self.checker_report
+                else:
+                    self.checker_report.success(
+                        description="Check script execution",
+                        details=log_msg,
+                        required=True
+                    )
+
+            except subprocess.TimeoutExpired:
+                # Kill the process if it times out
+                process.kill()
                 self.checker_report.fail(
                     description="Check script execution",
-                    reason=f"Script failed with exit code {exit_code}",
-                    details=log_msg,
+                    reason=f"Script timed out after {self.timeout} seconds",
                     required=True
                 )
                 return self.checker_report
-            else:
-                self.checker_report.success(
-                    description="Check script execution",
-                    details=log_msg,
-                    required=True
-                )
 
-        except subprocess.TimeoutExpired:
-            # Kill the process if it times out
-            process.kill()
-            self.checker_report.fail(
-                description="Check script execution",
-                reason=f"Script timed out after {self.timeout} seconds",
-                required=True
-            )
-            return self.checker_report
-
-        # Check each task's output
-        for task_name, task in TASKS.items():
-            try:
-                # Check if output file exists
-                output_file = os.path.join(self.output_dir, f"{task_name}.parquet")
-                if not os.path.exists(output_file):
-                    self.checker_report.fail(
-                        description=f"Check {task_name} output",
-                        reason=f"Output file not found: {output_file}",
-                        required=True
-                    )
-                    continue
-
-                # Read output dataframe
+            # Check each task's output
+            for task_name, task in TASKS.items():
                 try:
-                    student_df = self.spark.read.parquet(output_file)
+                    # Check if output file exists
+                    output_file = os.path.join(temp_dir, f"{task_name}.parquet")
+                    if not os.path.exists(output_file):
+                        self.checker_report.fail(
+                            description=f"Check {task_name} output",
+                            reason=f"Output file not found: {output_file}",
+                            required=True
+                        )
+                        continue
+
+                    # Read output dataframe
+                    try:
+                        student_df = self.spark.read.parquet(output_file)
+                    except Exception as e:
+                        self.checker_report.fail(
+                            description=f"Check {task_name} output",
+                            reason=f"Failed to read output file: {str(e)}",
+                            required=True
+                        )
+                        continue
+
+                    # Check if dataframe is not empty
+                    if student_df.count() == 0:
+                        self.checker_report.fail(
+                            description=f"Check {task_name} output",
+                            reason="Output dataframe is empty",
+                            required=True
+                        )
+                        continue
+
+                    # Read gold dataframe
+                    gold_file = os.path.join(self.gold_data_path, f"{task_name}.parquet")
+                    try:
+                        gold_df = self.spark.read.parquet(gold_file)
+                    except Exception as e:
+                        self.checker_report.fail(
+                            description=f"Check {task_name} gold data",
+                            reason=f"Failed to read gold file: {str(e)}",
+                            required=True
+                        )
+                        continue
+
+                    # Compare dataframes
+                    try:
+                        if task_name == "task_4":
+                            check_task4(
+                                student=student_df,
+                                gold=gold_df,
+                                sort_df_by=task.sort_df_by,
+                                sort_df_ascending=task.sort_df_ascending
+                            )
+                        else:
+                            compare_dataframes(
+                                student=student_df,
+                                gold=gold_df,
+                                sort_df_by=task.sort_df_by,
+                                sort_df_ascending=task.sort_df_ascending
+                            )
+                        self.checker_report.success(
+                            description=f"Check {task_name} results",
+                            required=True
+                        )
+                    except AssertionError as e:
+                        self.checker_report.fail(
+                            description=f"Check {task_name} results",
+                            reason=str(e),
+                            required=True
+                        )
+
                 except Exception as e:
                     self.checker_report.fail(
-                        description=f"Check {task_name} output",
-                        reason=f"Failed to read output file: {str(e)}",
+                        description=f"Check {task_name}",
+                        reason=f"Unexpected error: {str(e)}",
                         required=True
                     )
-                    continue
-
-                # Check if dataframe is not empty
-                if student_df.count() == 0:
-                    self.checker_report.fail(
-                        description=f"Check {task_name} output",
-                        reason="Output dataframe is empty",
-                        required=True
-                    )
-                    continue
-
-                # Read gold dataframe
-                gold_file = os.path.join(self.gold_data_path, f"{task_name}.parquet")
-                try:
-                    gold_df = self.spark.read.parquet(gold_file)
-                except Exception as e:
-                    self.checker_report.fail(
-                        description=f"Check {task_name} gold data",
-                        reason=f"Failed to read gold file: {str(e)}",
-                        required=True
-                    )
-                    continue
-
-                # Compare dataframes
-                try:
-                    if task_name == "task_4":
-                        check_task4(
-                            student=student_df,
-                            gold=gold_df,
-                            sort_df_by=task.sort_df_by,
-                            sort_df_ascending=task.sort_df_ascending
-                        )
-                    else:
-                        compare_dataframes(
-                            student=student_df,
-                            gold=gold_df,
-                            sort_df_by=task.sort_df_by,
-                            sort_df_ascending=task.sort_df_ascending
-                        )
-                    self.checker_report.success(
-                        description=f"Check {task_name} results",
-                        required=True
-                    )
-                except AssertionError as e:
-                    self.checker_report.fail(
-                        description=f"Check {task_name} results",
-                        reason=str(e),
-                        required=True
-                    )
-
-            except Exception as e:
-                self.checker_report.fail(
-                    description=f"Check {task_name}",
-                    reason=f"Unexpected error: {str(e)}",
-                    required=True
-                )
 
         return self.checker_report
 
