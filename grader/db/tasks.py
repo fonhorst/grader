@@ -584,6 +584,14 @@ async def update_student(
             if course_id is not None:
                 student.course_id = course_id
             
+            # Re-fetch the student with eager loading in a new transaction
+        async with session.begin():
+            stmt = await session.execute(
+                select(Student).where(Student.id == student_id).options(
+                    subqueryload(Student.course)
+                )
+            )
+            student = stmt.scalar_one()
             return student
 
 
