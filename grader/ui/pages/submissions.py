@@ -29,6 +29,8 @@ if 'filters' not in st.session_state:
     }
 
 # Define checker types and their parameters
+# TODO: replace with reflection
+# TODO: some parameters may be autowired by the grader itself. they should be marked as such.
 CHECKER_TYPES = {
     "ClickHouse": {
         "host": {"type": "text", "default": "localhost"},
