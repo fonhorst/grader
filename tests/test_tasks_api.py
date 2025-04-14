@@ -73,7 +73,8 @@ def create_test_client(mock_service: MockCheckerService):
 def mock_task_info():
     return TaskInfo(
         id=uuid.uuid4(),
-        user_id="test_user",
+        student_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        course_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
         name="Test Task",
         tag="test_tag",
         status=TaskStatus.FINISHED.value,

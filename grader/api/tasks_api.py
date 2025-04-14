@@ -29,7 +29,7 @@ def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:
     """Convert TaskInfo to TaskResponse."""
     return TaskResponse(
         id=task_info.id,
-        user_id=task_info.user_id,
+        user_id=str(task_info.student_id),
         name=task_info.name,
         tag=task_info.tag,
         attachment=task_info.attachment,
