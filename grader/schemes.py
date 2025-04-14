@@ -46,3 +46,55 @@ class TaskListResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "healthy"
     version: str = "1.0.0"
+
+
+# Course-related DTOs
+class CourseCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class CourseUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class CourseResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class CourseListResponse(BaseModel):
+    courses: List[CourseResponse]
+
+
+# Student-related DTOs
+class StudentCreateRequest(BaseModel):
+    name: str
+    course_id: uuid.UUID
+    group: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class StudentUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    group: Optional[str] = None
+    tag: Optional[str] = None
+    course_id: Optional[uuid.UUID] = None
+
+
+class StudentResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    group: Optional[str] = None
+    tag: Optional[str] = None
+    course_id: uuid.UUID
+    course_name: str
+
+
+class StudentListResponse(BaseModel):
+    students: List[StudentResponse]

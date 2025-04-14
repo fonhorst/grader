@@ -6,7 +6,6 @@ from typing import Optional
 import os
 import json
 import uuid
-from pathlib import Path
 
 import grader
 from grader.checking.base import CheckerReport
@@ -629,9 +628,13 @@ def start_api(host: str, port: int, reload: bool):
     import uvicorn
     from fastapi import FastAPI
     from grader.api.tasks_api import router as tasks_router
+    from grader.api.students_api import router as students_router
+    from grader.api.courses_api import router as courses_router
     
     app = FastAPI()
     app.include_router(tasks_router)
+    app.include_router(students_router)
+    app.include_router(courses_router)
     
     logger.info("API server configured with Swagger UI at /docs")
     try:
