@@ -16,7 +16,11 @@ class TaskSubmitRequest(BaseModel):
 
 class TaskResponse(BaseModel):
     id: uuid.UUID
-    user_id: str
+    student_id: str
+    student_name: str
+    group: str
+    course_id: str
+    course_name: str
     name: str
     tag: Optional[str] = None
     attachment: Optional[str] = None
