@@ -33,7 +33,7 @@ def broker_queue_name():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def clean_tasks_table():
+async def clean_all_tables():
     """Clear all tasks from the database before each test and return count of remaining tasks."""
     await create_tables()
     await drop_all_tables()

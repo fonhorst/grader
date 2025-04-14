@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_course_and_student(clean_tasks_table):
+async def test_course_and_student(clean_all_tables):
     """Create a test course and student for task-related tests."""
     service = StudentCourseService()
         
@@ -42,15 +42,13 @@ async def test_course_and_student(clean_tasks_table):
         
     yield course, student
         
-    # Cleanup
-    await service.delete_student(student.id)
-    await service.delete_course(course.id)
+    # We don't do cleanup because 'clean_tasks_table' fixture will do it
 
 
 @pytest.mark.asyncio
-async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_task_submit_positive(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test complete task lifecycle with successful execution."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
@@ -108,9 +106,9 @@ async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, bro
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_task_submit_negative(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test complete task lifecycle with failed execution."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
@@ -163,9 +161,9 @@ async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, bro
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_task_cancellation(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test task cancellation during execution."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
@@ -216,9 +214,9 @@ async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker
 
 
 @pytest.mark.asyncio
-async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_task_listing(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test listing tasks with various filters."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
@@ -299,9 +297,9 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
 
 
 @pytest.mark.asyncio
-async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_task_deletion(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test task deletion."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
@@ -345,9 +343,9 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_que
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+async def test_delete_all_tasks(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test deleting all tasks."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
     course, student = test_course_and_student
     
