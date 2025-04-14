@@ -29,7 +29,11 @@ def convert_task_info_to_response(task_info: TaskInfo) -> TaskResponse:
     """Convert TaskInfo to TaskResponse."""
     return TaskResponse(
         id=task_info.id,
-        user_id=task_info.user_id,
+        student_id=str(task_info.student_id),
+        student_name=task_info.student_name,
+        group=task_info.group,
+        course_id=str(task_info.course_id),
+        course_name=task_info.course_name,
         name=task_info.name,
         tag=task_info.tag,
         attachment=task_info.attachment,
@@ -51,7 +55,7 @@ async def submit_task(
     """
     try:
         task_info = await checker_service.submit(
-            user_id=request.user_id,
+            student_id=request.student_id,
             check_type=request.check_type,
             args=request.args,
             name=request.name,
@@ -60,7 +64,7 @@ async def submit_task(
         return convert_task_info_to_response(task_info)
     except Exception as e:
         logger.error(
-            f"Failed to submit task. User ID: {request.user_id}, Check Type: {request.check_type}, "
+            f"Failed to submit task. User ID: {request.student_id}, Check Type: {request.check_type}, "
             f"Name: {request.name}, Tag: {request.tag}",
             exc_info=True
         )
@@ -104,7 +108,7 @@ async def list_tasks(
     """
     try:
         task_infos = await checker_service.list(
-            user_id=user_id,
+            student_id=user_id,
             tag=tag,
             status=TaskStatus(status) if status else None
         )

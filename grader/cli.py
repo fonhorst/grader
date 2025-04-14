@@ -7,9 +7,11 @@ import os
 import json
 import uuid
 
+import grader
 from grader.checking.base import CheckerReport
 from grader.client.grader import GraderAPIClient, GraderApiException, GraderApiTimeoutException
 from grader.schemes import TaskSubmitRequest
+from grader.db.init_db import init_database
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,16 @@ def cli(verbose: bool):
 
 
 @cli.group()
+def test():
+    pass
+
+
+@cli.group()
+def ui():
+    pass
+
+
+@cli.group()
 def task():
     pass
 
@@ -98,6 +110,28 @@ def serve():
 @cli.group()
 def k8s():
     pass
+
+
+@test.command()
+def fill_db_with_mock_data():
+    # TODO: implement the following logic
+    # 1. check if the database is empty
+    # 2. if it is, create tables (using appopriate models)
+    # 3. fill it with mock data. 
+    # Table representeted with Task class should contain 15 records with different statuses and different users
+    # At least 5 records should be in the finished state with Non empty reports
+    # At least 10 records should have tags
+    asyncio.run(init_database())
+
+    pass
+
+
+@ui.command()
+def run():
+    import nest_asyncio
+    from streamlit.web import cli
+
+    cli.main_run([os.path.join(grader.__path__[0], "ui", "main.py")])
 
 
 @task.command()
@@ -139,7 +173,7 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
             
             request = TaskSubmitRequest(
                 check_type=check_type,
-                user_id=user_id,
+                student_id=user_id,
                 name=name,
                 tag=tag,
                 args=checker_args
@@ -486,7 +520,7 @@ def run(checker: str, arguments: str, output: str):
 @click.option('--namespace', '-n', required=True, help='Kubernetes namespace to check resources in')
 @click.option('--report', '-r', type=click.Path(dir_okay=False), required=True, help='Path to save the report in Markdown format')
 @click.option('--log-file', '-l', type=click.Path(dir_okay=False), help='Path to save logs')
-def k8s(namespace: str, report: str, log_file: str):
+def kube(namespace: str, report: str, log_file: str):
     """Run Kubernetes checker directly.
     
     This command runs the Kubernetes checker without using the task queue service.
@@ -594,9 +628,13 @@ def start_api(host: str, port: int, reload: bool):
     import uvicorn
     from fastapi import FastAPI
     from grader.api.tasks_api import router as tasks_router
+    from grader.api.students_api import router as students_router
+    from grader.api.courses_api import router as courses_router
     
     app = FastAPI()
     app.include_router(tasks_router)
+    app.include_router(students_router)
+    app.include_router(courses_router)
     
     logger.info("API server configured with Swagger UI at /docs")
     try:

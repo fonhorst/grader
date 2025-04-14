@@ -2,30 +2,60 @@ from time import sleep
 import pytest
 import asyncio
 from faststream.rabbit import TestRabbitBroker
+import uuid
+from typing import Tuple
+
+import pytest_asyncio
 
 from grader.checking.base import CheckReport
 from grader.checking.checking import CheckType, CheckerReport
 from grader.db.tasks import TaskStatus
 from grader.faststream_tasks.schemes import FastStreamCheckTaskException
 from grader.faststream_tasks.tasks import UNEXPECTED_ERROR_MESSAGE, broker, check
-from grader.services.checker import CheckerService, TaskInfo
+from grader.services.checker import CheckerService, StudentCourseService, TaskInfo
 from tests.conftest import wait_for_status
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.asyncio
-async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
-    """Test complete task lifecycle with successful execution."""
+@pytest_asyncio.fixture(scope="function")
+async def test_course_and_student(clean_all_tables):
+    """Create a test course and student for task-related tests."""
+    service = StudentCourseService()
+        
+    # Create test course
+    course = await service.create_course(
+        name="Test Course",
+        description="Course for testing",
+        tag="test"
+    )
+        
+    # Create test student
+    students = await service.create_students([{
+        "name": "Test Student",
+        "course_id": course.id,
+        "group": "A",
+        "tag": "test_student"
+    }])
+    student = students[0]
+        
+    yield course, student
+        
+    # We don't do cleanup because 'clean_tasks_table' fixture will do it
 
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+
+@pytest.mark.asyncio
+async def test_task_submit_positive(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
+    """Test complete task lifecycle with successful execution."""
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
-        user_id = "test_user"
         check_type = CheckType.CLICKHOUSE
         args = {"host": "localhost", "user": "admin", "password": "admin"}
         name = "Test Task"
@@ -46,7 +76,7 @@ async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, bro
             
             # 1. Submit task
             response = await service.submit(
-                user_id=user_id,
+                student_id=str(student.id),
                 check_type=check_type,
                 args=args,
                 name=name,
@@ -76,16 +106,16 @@ async def test_task_submit_positive(clean_tasks_table, clean_rabbitmq_queue, bro
 
 
 @pytest.mark.asyncio
-async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
+async def test_task_submit_negative(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test complete task lifecycle with failed execution."""
-
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
-        user_id = "test_user"
         check_type = CheckType.CLICKHOUSE
         args = {"host": "localhost", "user": "admin", "password": "admin"}
         name = "Test Task"
@@ -103,7 +133,7 @@ async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, bro
             
             # 1. Submit task
             response = await service.submit(
-                user_id=user_id,
+                student_id=str(student.id),
                 check_type=check_type,
                 args=args,
                 name=name,
@@ -131,15 +161,16 @@ async def test_task_submit_negative(clean_tasks_table, clean_rabbitmq_queue, bro
 
 
 @pytest.mark.asyncio
-async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
+async def test_task_cancellation(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test task cancellation during execution."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
         # Test data
-        user_id = "test_user"
         check_type = CheckType.CLICKHOUSE
         args = {"host": "localhost", "user": "admin", "password": "admin"}
         name = "Test Task"
@@ -157,7 +188,7 @@ async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker
             
             # 1. Submit task
             response = await service.submit(
-                user_id=user_id,
+                student_id=str(student.id),
                 check_type=check_type,
                 args=args,
                 name=name,
@@ -183,10 +214,12 @@ async def test_task_cancellation(clean_tasks_table, clean_rabbitmq_queue, broker
 
 
 @pytest.mark.asyncio
-async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
+async def test_task_listing(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test listing tasks with various filters."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
@@ -205,7 +238,7 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
 
             # Create a FINISHED task and wait for completion
             finished_task = await service.submit(
-                user_id="test_user",
+                student_id=str(student.id),
                 check_type=CheckType.CLICKHOUSE,
                 args={"host": "localhost"},
                 name="Test Task FINISHED",
@@ -218,7 +251,7 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
 
             # Create a RUNNING task
             running_task = await service.submit(
-                user_id="test_user",
+                student_id=str(student.id),
                 check_type=CheckType.CLICKHOUSE,
                 args={"host": "localhost"},
                 name="Test Task RUNNING",
@@ -240,9 +273,9 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
             assert len(all_tasks) >= len(task_ids), f"Expected at least {len(task_ids)} tasks, found {len(all_tasks)}"
             
             # 2. List by user
-            user_tasks = await service.list(user_id="test_user")
+            user_tasks = await service.list(student_id=str(student.id))
             assert len(user_tasks) >= len(task_ids)
-            assert all(task.user_id == "test_user" for task in user_tasks)
+            assert all(task.student_id == student.id for task in user_tasks)
             
             # 3. List by tag
             tagged_tasks = await service.list(tag="test_tag")
@@ -264,10 +297,12 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
 
 
 @pytest.mark.asyncio
-async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
+async def test_task_deletion(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test task deletion."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
@@ -283,7 +318,7 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_que
             
             # Create a task
             response = await service.submit(
-                user_id="test_user",
+                student_id=str(student.id),
                 check_type=CheckType.CLICKHOUSE,
                 args={"host": "localhost"},
                 name="Test Task",
@@ -308,10 +343,12 @@ async def test_task_deletion(clean_tasks_table, clean_rabbitmq_queue, broker_que
 
 
 @pytest.mark.asyncio
-async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, broker_queue_name, monkeypatch):
+async def test_delete_all_tasks(clean_all_tables, clean_rabbitmq_queue, broker_queue_name, monkeypatch, test_course_and_student):
     """Test deleting all tasks."""
-    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_tasks_table)
+    logger.info("Ensure clean tasks table. Number of tasks: %d", clean_all_tables)
     logger.info("Ensure clean rabbitmq queue. Queue name: %s", clean_rabbitmq_queue)
+    course, student = test_course_and_student
+    
     async with TestRabbitBroker(broker, with_real=True) as br:
         service = CheckerService(queue=broker_queue_name, broker=br)
         
@@ -328,7 +365,7 @@ async def test_delete_all_tasks(clean_tasks_table, clean_rabbitmq_queue, broker_
             # Create multiple tasks
             for i in range(3):
                 await service.submit(
-                    user_id=f"test_user_{i}",
+                    student_id=str(student.id),
                     check_type=CheckType.CLICKHOUSE,
                     args={"host": "localhost"},
                     name=f"Test Task {i}",

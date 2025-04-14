@@ -50,7 +50,11 @@ class MockCheckerServiceNoReport(MockCheckerService):
     def __init__(self):
         self.mock_task_info = TaskInfo(
             id=uuid.uuid4(),
-            user_id="test_user",
+            student_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            student_name="Test Student",
+            group="Test Group",
+            course_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            course_name="Test Course",
             name="Test Task",
             tag="test_tag",
             status=TaskStatus.RUNNING.value,
@@ -73,7 +77,11 @@ def create_test_client(mock_service: MockCheckerService):
 def mock_task_info():
     return TaskInfo(
         id=uuid.uuid4(),
-        user_id="test_user",
+        student_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        student_name="Test Student",
+        group="Test Group",
+        course_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        course_name="Test Course",
         name="Test Task",
         tag="test_tag",
         status=TaskStatus.FINISHED.value,
@@ -97,7 +105,7 @@ async def test_submit_task(mock_task_info):
         json={
             "check_type": CheckType.CLICKHOUSE.value,
             "args": {"host": "localhost"},
-            "user_id": "test_user",
+            "student_id": str(mock_task_info.student_id),
             "name": "Test Task",
             "tag": "test_tag"
         }
@@ -105,7 +113,7 @@ async def test_submit_task(mock_task_info):
     
     assert response.status_code == 201
     data = response.json()
-    assert data["user_id"] == "test_user"
+    assert data["student_id"] == str(mock_task_info.student_id)
     assert data["name"] == "Test Task"
     assert data["tag"] == "test_tag"
 
@@ -120,7 +128,11 @@ async def test_get_task(mock_task_info):
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == str(mock_task_info.id)
-    assert data["user_id"] == mock_task_info.user_id
+    assert data["student_id"] == str(mock_task_info.student_id)
+    assert data["student_name"] == mock_task_info.student_name
+    assert data["group"] == mock_task_info.group
+    assert data["course_id"] == str(mock_task_info.course_id)
+    assert data["course_name"] == mock_task_info.course_name
     assert data["name"] == mock_task_info.name
 
 
@@ -137,11 +149,15 @@ async def test_list_tasks(mock_task_info):
     assert data["tasks"][0]["id"] == str(mock_task_info.id)
     
     # Test with filters
-    response = test_client.get(f"/tasks/?user_id=test_user&tag=test_tag&status={TaskStatus.FINISHED.value}")
+    response = test_client.get(f"/tasks/?student_id={mock_task_info.student_id}&tag=test_tag&status={TaskStatus.FINISHED.value}")
     assert response.status_code == 200
     data = response.json()
     assert len(data["tasks"]) == 1
-    assert data["tasks"][0]["user_id"] == "test_user"
+    assert data["tasks"][0]["student_id"] == str(mock_task_info.student_id)
+    assert data["tasks"][0]["student_name"] == mock_task_info.student_name
+    assert data["tasks"][0]["group"] == mock_task_info.group
+    assert data["tasks"][0]["course_id"] == str(mock_task_info.course_id)
+    assert data["tasks"][0]["course_name"] == mock_task_info.course_name
     assert data["tasks"][0]["tag"] == "test_tag"
     assert data["tasks"][0]["status"] == TaskStatus.FINISHED.value
 
