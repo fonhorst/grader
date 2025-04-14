@@ -104,7 +104,7 @@ async def list_tasks(
     """
     try:
         task_infos = await checker_service.list(
-            user_id=user_id,
+            student_id=user_id,
             tag=tag,
             status=TaskStatus(status) if status else None
         )

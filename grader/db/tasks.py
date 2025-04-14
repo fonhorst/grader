@@ -289,7 +289,7 @@ async def delete_task(task_id: Union[str, uuid.UUID]):
 async def list_tasks(
         uids: Optional[List[str]] = None,
         name: Optional[Union[str, List[str]]] = None,
-        user_id: Optional[Union[str, List[str]]] = None,
+        student_id: Optional[Union[str, List[str]]] = None,
         tag: Optional[Union[str, List[str]]] = None,
         statuses: Optional[List[str]] = None,
         submit_time: Optional[Tuple[DateTimeType, DateTimeType]] = None,
@@ -306,7 +306,7 @@ async def list_tasks(
 
         vparams = [
             (name, Task.name),
-            (user_id, Task.student_id),
+            (student_id, Task.student_id),
             (tag, Task.tag),
             (statuses, Task.status),
             (group, Student.group),

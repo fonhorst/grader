@@ -69,7 +69,6 @@ class TaskInfo(BaseModel):
     def from_db_task(cls, task: Task) -> 'TaskInfo':
         return cls(
             id=task.id,
-            user_id=task.student_id,
             name=task.name,
             tag=task.tag,
             attachment=task.attachment,
@@ -388,7 +387,7 @@ class CheckerService:
     async def list(
         self,
         *,
-        user_id: Optional[str] = None,
+        student_id: Optional[str] = None,
         tag: Optional[str] = None,
         status: Optional[TaskStatus] = None
     ) -> List[TaskInfo]:
@@ -404,7 +403,7 @@ class CheckerService:
             List of matching task responses
         """
         tasks = await list_tasks(
-            user_id=user_id,
+            student_id=student_id,
             tag=tag,
             statuses=[status.value] if status else None
         )

@@ -19,7 +19,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def test_course_and_student(clean_tasks_table):
     """Create a test course and student for task-related tests."""
     service = StudentCourseService()
@@ -277,7 +277,7 @@ async def test_task_listing(clean_tasks_table, clean_rabbitmq_queue, broker_queu
             # 2. List by user
             user_tasks = await service.list(student_id=str(student.id))
             assert len(user_tasks) >= len(task_ids)
-            assert all(task.student_id == str(student.id) for task in user_tasks)
+            assert all(task.student_id == student.id for task in user_tasks)
             
             # 3. List by tag
             tagged_tasks = await service.list(tag="test_tag")
