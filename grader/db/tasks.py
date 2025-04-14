@@ -8,7 +8,7 @@ from typing import Optional, Dict, Union, Any, List, Tuple
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import ForeignKey, NullPool, String, UUID, TIMESTAMP, delete, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, subqueryload
 
 from grader.env import ENV_VAR_DB_CONN, ENV_VAR_ECHO_DB_QUERY
@@ -505,11 +505,26 @@ async def list_courses(
 
 
 async def delete_course(course_id: Union[str, uuid.UUID]):
-    async with AsyncSessionBuilder() as session:
-        async with session.begin():
-            course = await session.get(Course, course_id)
-            if course:
-                await session.delete(course)
+    """
+    Delete a course by ID.
+    
+    Args:
+        course_id: ID of the course to delete
+        
+    Raises:
+        ValueError: If the course has associated students that prevent deletion
+    """
+    try:
+        async with AsyncSessionBuilder() as session:
+            async with session.begin():
+                course = await session.get(Course, course_id)
+                if course:
+                    await session.delete(course)
+    except IntegrityError as e:
+        raise ValueError(
+            f"Cannot delete course {course_id} because it has associated students. "
+            f"Please delete or move the students first."
+        ) from e
 
 
 async def create_student(
@@ -631,11 +646,26 @@ async def list_students(
 
 
 async def delete_student(student_id: Union[str, uuid.UUID]):
-    async with AsyncSessionBuilder() as session:
-        async with session.begin():
-            student = await session.get(Student, student_id)
-            if student:
-                await session.delete(student)
+    """
+    Delete a student by ID.
+    
+    Args:
+        student_id: ID of the student to delete
+        
+    Raises:
+        ValueError: If the student has associated tasks that prevent deletion
+    """
+    try:
+        async with AsyncSessionBuilder() as session:
+            async with session.begin():
+                student = await session.get(Student, student_id)
+                if student:
+                    await session.delete(student)
+    except IntegrityError as e:
+        raise ValueError(
+            f"Cannot delete student {student_id} because they have associated tasks. "
+            f"Please delete the tasks first."
+        ) from e
 
 
 async def create_students(
