@@ -9,7 +9,7 @@ from grader.checking.checking import CheckType
 class TaskSubmitRequest(BaseModel):
     check_type: CheckType
     args: dict
-    user_id: str
+    student_id: str
     name: Optional[str] = None
     tag: Optional[str] = None
 

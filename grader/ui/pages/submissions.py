@@ -264,7 +264,7 @@ if st.session_state.get('show_submit_modal', False):
                     async with GraderAPIClient() as client:
                         return await client.submit_task(
                             request=TaskSubmitRequest(
-                                user_id=form_data.get("student_username", "default_user"),
+                                student_id=form_data.get("student_username", "default_user"),
                                 tag=checker_type,
                                 **form_data
                             )

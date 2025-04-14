@@ -55,7 +55,7 @@ async def submit_task(
     """
     try:
         task_info = await checker_service.submit(
-            student_id=request.user_id,
+            student_id=request.student_id,
             check_type=request.check_type,
             args=request.args,
             name=request.name,
@@ -64,7 +64,7 @@ async def submit_task(
         return convert_task_info_to_response(task_info)
     except Exception as e:
         logger.error(
-            f"Failed to submit task. User ID: {request.user_id}, Check Type: {request.check_type}, "
+            f"Failed to submit task. User ID: {request.student_id}, Check Type: {request.check_type}, "
             f"Name: {request.name}, Tag: {request.tag}",
             exc_info=True
         )

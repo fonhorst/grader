@@ -174,7 +174,7 @@ def submit(check_type: str, user_id: str, name: str, tag: str, args: str, args_f
             
             request = TaskSubmitRequest(
                 check_type=check_type,
-                user_id=user_id,
+                student_id=user_id,
                 name=name,
                 tag=tag,
                 args=checker_args

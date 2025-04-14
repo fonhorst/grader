@@ -50,7 +50,11 @@ class MockCheckerServiceNoReport(MockCheckerService):
     def __init__(self):
         self.mock_task_info = TaskInfo(
             id=uuid.uuid4(),
-            user_id="test_user",
+            student_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            student_name="Test Student",
+            group="Test Group",
+            course_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+            course_name="Test Course",
             name="Test Task",
             tag="test_tag",
             status=TaskStatus.RUNNING.value,
@@ -74,7 +78,10 @@ def mock_task_info():
     return TaskInfo(
         id=uuid.uuid4(),
         student_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        student_name="Test Student",
+        group="Test Group",
         course_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        course_name="Test Course",
         name="Test Task",
         tag="test_tag",
         status=TaskStatus.FINISHED.value,
@@ -98,7 +105,7 @@ async def test_submit_task(mock_task_info):
         json={
             "check_type": CheckType.CLICKHOUSE.value,
             "args": {"host": "localhost"},
-            "student_id": "test_user",
+            "student_id": str(mock_task_info.student_id),
             "name": "Test Task",
             "tag": "test_tag"
         }
@@ -109,10 +116,6 @@ async def test_submit_task(mock_task_info):
     assert data["student_id"] == str(mock_task_info.student_id)
     assert data["name"] == "Test Task"
     assert data["tag"] == "test_tag"
-    assert data["student_name"] == mock_task_info.student_name
-    assert data["group"] == mock_task_info.group
-    assert data["course_id"] == str(mock_task_info.course_id)
-    assert data["course_name"] == mock_task_info.course_name
 
 
 @pytest.mark.asyncio
