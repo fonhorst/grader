@@ -10,26 +10,26 @@ class MockStudentCourseService:
     
     def __init__(self, mock_student_info: StudentInfo):
         self.mock_student_info = mock_student_info
-        self.mock_student_list = [mock_student_info]
+        self.mock_student_list = [mock_student_info] if mock_student_info else []
     
     async def create_students(self, students_data: list[dict]) -> list[StudentInfo]:
         return [self.mock_student_info]
     
     async def get_student(self, student_id: uuid.UUID) -> StudentInfo:
-        if str(student_id) == str(self.mock_student_info.id):
-            return self.mock_student_info
-        raise ValueError("Student not found")
+        if not self.mock_student_info or str(student_id) != str(self.mock_student_info.id):
+            raise ValueError("Student not found")
+        return self.mock_student_info
     
     async def list_students(self, *, name: str = None, group: str = None, tag: str = None, course_id: str = None) -> list[StudentInfo]:
         return self.mock_student_list
     
     async def update_student(self, student_id: uuid.UUID, *, name: str = None, group: str = None, tag: str = None, course_id: uuid.UUID = None) -> StudentInfo:
-        if str(student_id) == str(self.mock_student_info.id):
-            return self.mock_student_info
-        raise ValueError("Student not found")
+        if not self.mock_student_info or str(student_id) != str(self.mock_student_info.id):
+            raise ValueError("Student not found")
+        return self.mock_student_info
     
     async def delete_student(self, student_id: uuid.UUID) -> None:
-        if str(student_id) != str(self.mock_student_info.id):
+        if not self.mock_student_info or str(student_id) != str(self.mock_student_info.id):
             raise ValueError("Student not found")
 
 
