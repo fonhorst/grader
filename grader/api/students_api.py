@@ -101,7 +101,7 @@ async def list_students(
     name: Optional[str] = None,
     group: Optional[str] = None,
     tag: Optional[str] = None,
-    course_id: Optional[uuid.UUID] = None,
+    course_id: Optional[str] = None,
     service: StudentCourseService = Depends(get_student_course_service)
 ) -> StudentListResponse:
     """
@@ -112,7 +112,7 @@ async def list_students(
             name=name,
             group=group,
             tag=tag,
-            course_id=str(course_id) if course_id else None
+            course_id=course_id
         )
         students = [convert_student_info_to_response(student_info) for student_info in student_infos]
         return StudentListResponse(students=students)

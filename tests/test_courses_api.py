@@ -10,26 +10,26 @@ class MockStudentCourseService:
     
     def __init__(self, mock_course_info: CourseInfo):
         self.mock_course_info = mock_course_info
-        self.mock_course_list = [mock_course_info]
+        self.mock_course_list = [mock_course_info] if mock_course_info else []
     
     async def create_course(self, *, name: str, description: str = None, tag: str = None) -> CourseInfo:
         return self.mock_course_info
     
     async def get_course(self, course_id: uuid.UUID) -> CourseInfo:
-        if str(course_id) == str(self.mock_course_info.id):
-            return self.mock_course_info
-        raise ValueError("Course not found")
+        if not self.mock_course_info or str(course_id) != str(self.mock_course_info.id):
+            raise ValueError("Course not found")
+        return self.mock_course_info
     
     async def list_courses(self, *, name: str = None, tag: str = None) -> list[CourseInfo]:
         return self.mock_course_list
     
     async def update_course(self, course_id: uuid.UUID, *, name: str = None, description: str = None, tag: str = None) -> CourseInfo:
-        if str(course_id) == str(self.mock_course_info.id):
-            return self.mock_course_info
-        raise ValueError("Course not found")
+        if not self.mock_course_info or str(course_id) != str(self.mock_course_info.id):
+            raise ValueError("Course not found")
+        return self.mock_course_info
     
     async def delete_course(self, course_id: uuid.UUID) -> None:
-        if str(course_id) != str(self.mock_course_info.id):
+        if not self.mock_course_info or str(course_id) != str(self.mock_course_info.id):
             raise ValueError("Course not found")
 
 
@@ -76,6 +76,7 @@ async def test_create_course(mock_course_info):
     
     assert response.status_code == 201
     data = response.json()
+    assert data["id"] == str(mock_course_info.id)
     assert data["name"] == mock_course_info.name
     assert data["description"] == mock_course_info.description
     assert data["tag"] == mock_course_info.tag
@@ -111,7 +112,9 @@ async def test_list_courses(mock_course_info):
     assert data["courses"][0]["id"] == str(mock_course_info.id)
     
     # Test with filters
-    response = test_client.get(f"/courses/?name={mock_course_info.name}&tag={mock_course_info.tag}")
+    response = test_client.get(
+        f"/courses/?name={mock_course_info.name}&tag={mock_course_info.tag}"
+    )
     assert response.status_code == 200
     data = response.json()
     assert len(data["courses"]) == 1
