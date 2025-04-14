@@ -4,7 +4,7 @@ import pytest
 from grader.services.checker import StudentCourseService
 
 @pytest.mark.asyncio
-async def test_course_operations(clean_tasks_table):
+async def test_course_operations(clean_all_tables):
     """Test course CRUD operations."""
     service = StudentCourseService()
     
@@ -54,7 +54,7 @@ async def test_course_operations(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_student_operations(clean_tasks_table):
+async def test_student_operations(clean_all_tables):
     """Test student CRUD operations."""
     service = StudentCourseService()
     
@@ -121,7 +121,7 @@ async def test_student_operations(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_bulk_student_creation(clean_tasks_table):
+async def test_bulk_student_creation(clean_all_tables):
     """Test creating multiple students in a single transaction."""
     service = StudentCourseService()
     
@@ -162,7 +162,7 @@ async def test_bulk_student_creation(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_student_course_relationship(clean_tasks_table):
+async def test_student_course_relationship(clean_all_tables):
     """Test student-course relationship operations."""
     service = StudentCourseService()
     
@@ -200,7 +200,7 @@ async def test_student_course_relationship(clean_tasks_table):
 
 
 @pytest.mark.asyncio
-async def test_error_handling(clean_tasks_table):
+async def test_error_handling(clean_all_tables):
     """Test error handling for invalid operations."""
     service = StudentCourseService()
     
